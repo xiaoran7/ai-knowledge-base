@@ -139,12 +139,26 @@ public class ChatService {
             throw new IllegalArgumentException("调试问题不能为空");
         }
 
-        LlmConfig llmConfig = getEnabledConfig(userId);
+        LlmConfig llmConfig = null;
         int topK = sanitizeTopK(request.topK());
         String originalQuery = request.message().trim();
 
+        try {
+            llmConfig = getEnabledConfig(userId);
+        } catch (Exception e) {
+            log.info("Retrieval debug will skip query rewrite because no enabled LLM config is available: {}", e.getMessage());
+        }
+
         SearchOutcome originalOutcome = searchKnowledgeHits(originalQuery, request.knowledgeBaseId(), llmConfig, topK, topK);
-        String rewrittenQuery = llmService.rewriteQuery(originalQuery, llmConfig);
+        String rewrittenQuery = "";
+
+        if (llmConfig != null) {
+            try {
+                rewrittenQuery = llmService.rewriteQuery(originalQuery, llmConfig);
+            } catch (Exception e) {
+                log.warn("Retrieval debug query rewrite failed, fallback to original query", e);
+            }
+        }
 
         SearchOutcome rewrittenOutcome = SearchOutcome.empty();
         String usedQuery = originalQuery;

@@ -490,6 +490,12 @@ async function handleRunRetrievalDebug() {
       message: retrievalForm.value.query.trim(),
       topK: retrievalForm.value.topK
     })
+  } catch (error) {
+    const message =
+      typeof error === 'object' && error && 'message' in error && typeof error.message === 'string'
+        ? error.message
+        : '妫€绱㈣皟璇曞け璐ワ紝璇风◢鍚庨噸璇?'
+    ElMessage.error(message)
   } finally {
     retrievalLoading.value = false
   }

@@ -11,7 +11,10 @@
 
       <div class="hero-actions">
         <el-button class="task-button" @click="handleOpenTasks">
-          任务记录
+          任务抽屉
+        </el-button>
+        <el-button class="task-button" plain @click="router.push('/document-tasks')">
+          任务中心
         </el-button>
         <el-upload
           :http-request="handleUpload"
@@ -446,6 +449,7 @@
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
@@ -465,6 +469,8 @@ import type { Document, DocumentDetail, DocumentStatus, DocumentTask } from '@/a
 type SummaryMode = 'AI_GENERATED' | 'HEURISTIC' | 'MANUAL_EDITED'
 
 const knowledgeStore = useKnowledgeStore()
+const route = useRoute()
+const router = useRouter()
 const md = new MarkdownIt({ breaks: true, linkify: true, html: true })
 
 const loading = ref(false)
@@ -804,6 +810,20 @@ async function handlePreview(id: string, initialTab: 'preview' | 'summary' = 'pr
   }
 }
 
+async function openDocumentFromRouteQuery() {
+  const documentId = typeof route.query.documentId === 'string' ? route.query.documentId : ''
+  const openPreview = route.query.openPreview === '1'
+  if (!documentId || !openPreview || previewLoading.value) {
+    return
+  }
+
+  await handlePreview(documentId)
+  const nextQuery = { ...route.query }
+  delete nextQuery.documentId
+  delete nextQuery.openPreview
+  await router.replace({ path: route.path, query: nextQuery })
+}
+
 async function refreshDocument(id: string) {
   if (previewVisible.value && previewDocument.value?.id === id) {
     previewLoading.value = true
@@ -907,6 +927,17 @@ watch(
     page.value = 1
     await knowledgeStore.fetchCategoryList()
     await fetchData()
+    await openDocumentFromRouteQuery()
+  }
+)
+
+watch(
+  () => [route.query.documentId, route.query.openPreview, selectedKbId.value] as const,
+  async ([documentId, openPreview, kbId]) => {
+    if (!kbId || typeof documentId !== 'string' || openPreview !== '1') {
+      return
+    }
+    await openDocumentFromRouteQuery()
   }
 )
 
@@ -916,6 +947,7 @@ onMounted(async () => {
   if (selectedKbId.value) {
     await knowledgeStore.fetchCategoryList()
     await fetchData()
+    await openDocumentFromRouteQuery()
   }
 })
 

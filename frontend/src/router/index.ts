@@ -46,10 +46,22 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 问答' }
       },
       {
+        path: 'retrieval-debug',
+        name: 'RetrievalDebug',
+        component: () => import('@/views/RetrievalDebug.vue'),
+        meta: { title: '检索调试' }
+      },
+      {
         path: 'documents',
         name: 'Documents',
         component: () => import('@/views/Documents.vue'),
         meta: { title: '文档管理' }
+      },
+      {
+        path: 'document-tasks',
+        name: 'DocumentTasks',
+        component: () => import('@/views/DocumentTasks.vue'),
+        meta: { title: '文档任务中心' }
       },
       {
         path: 'settings',

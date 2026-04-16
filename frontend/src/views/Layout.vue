@@ -11,7 +11,7 @@
         router
         background-color="#304156"
         text-color="#bfcbd9"
-        active-text-color="#409EFF"
+        active-text-color="#409eff"
       >
         <el-menu-item index="/dashboard">
           <el-icon><House /></el-icon>
@@ -25,9 +25,17 @@
           <el-icon><ChatDotRound /></el-icon>
           <span>AI 问答</span>
         </el-menu-item>
+        <el-menu-item index="/retrieval-debug">
+          <el-icon><Search /></el-icon>
+          <span>检索调试</span>
+        </el-menu-item>
         <el-menu-item index="/documents">
           <el-icon><Document /></el-icon>
           <span>文档管理</span>
+        </el-menu-item>
+        <el-menu-item index="/document-tasks">
+          <el-icon><List /></el-icon>
+          <span>文档任务</span>
         </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
@@ -85,7 +93,9 @@ import {
   House,
   Folder,
   ChatDotRound,
+  Search,
   Document,
+  List,
   Setting,
   User,
   SwitchButton
