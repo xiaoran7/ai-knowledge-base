@@ -49,7 +49,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -67,6 +69,7 @@ public class DocumentService {
     public static final String STAGE_INDEXING = "INDEXING";
     public static final String STAGE_COMPLETED = "COMPLETED";
     public static final String STAGE_FAILED = "FAILED";
+    public static final String STAGE_CANCELED = "CANCELED";
     public static final String TASK_TYPE_INGEST = "INGEST";
     public static final String TASK_TYPE_SUMMARY = "SUMMARY";
     public static final String TASK_TYPE_RETRY = "RETRY";
@@ -89,6 +92,7 @@ public class DocumentService {
     private final VectorStoreService vectorStoreService;
     private final LlmService llmService;
     private final TransactionTemplate transactionTemplate;
+    private final Map<String, TaskControl> taskControls = new ConcurrentHashMap<>();
 
     @Transactional
     public DocumentUploadResponse upload(MultipartFile file, String kbId, String categoryId, String userId) {
@@ -138,7 +142,7 @@ public class DocumentService {
             updateCategoryDocumentCount(categoryId);
         }
 
-        CompletableFuture.runAsync(() -> processDocument(saved.getId(), task.getId()));
+        startAsyncTask(task.getId(), saved.getId(), () -> processDocument(saved.getId(), task.getId()));
         return new DocumentUploadResponse(
                 saved.getId(),
                 saved.getTitle(),
@@ -159,6 +163,7 @@ public class DocumentService {
             Document document = documentRepository.findById(documentId)
                     .orElseThrow(() -> new IllegalArgumentException("文档不存在"));
             try {
+                throwIfTaskCanceled(taskId);
                 document.setStatus("PROCESSING");
                 document.setProcessingStage(STAGE_PARSING);
                 document.setLastError(null);
@@ -167,23 +172,33 @@ public class DocumentService {
 
                 String parsedContent = parseDocument(document.getFilePath(), document.getFileType());
                 document.setParsedContent(parsedContent);
+                throwIfTaskCanceled(taskId);
 
                 LlmConfig llmConfig = getDefaultEnabledLlmConfig(document.getUserId());
                 document.setProcessingStage(STAGE_SUMMARIZING);
                 documentRepository.save(document);
                 updateTask(taskId, "PROCESSING", STAGE_SUMMARIZING, null);
                 SummaryResult summaryResult = generateSummary(document, parsedContent, SUMMARY_MODE_AI, llmConfig);
+                throwIfTaskCanceled(taskId);
                 applySummaryResult(document, summaryResult);
                 document.setProcessingStage(STAGE_INDEXING);
                 documentRepository.save(document);
                 updateTask(taskId, "PROCESSING", STAGE_INDEXING, null);
 
                 reindexDocument(document, llmConfig);
+                throwIfTaskCanceled(taskId);
                 document.setStatus("SUMMARIZED");
                 document.setProcessingStage(STAGE_COMPLETED);
                 document.setLastError(null);
                 documentRepository.save(document);
                 completeTask(taskId, STAGE_COMPLETED);
+            } catch (TaskCancelledException e) {
+                log.info("Document task canceled for document {}", documentId);
+                document.setStatus("CANCELED");
+                document.setProcessingStage(STAGE_CANCELED);
+                document.setLastError(e.getMessage());
+                documentRepository.save(document);
+                cancelTaskRecord(taskId, e.getMessage());
             } catch (Exception e) {
                 log.error("Failed to process document {}", documentId, e);
                 document.setStatus("FAILED");
@@ -241,7 +256,7 @@ public class DocumentService {
         DocumentTask task = createTask(document, TASK_TYPE_SUMMARY, requestedMode, STAGE_SUMMARIZING, "PROCESSING");
 
         final String mode = requestedMode != null ? requestedMode : SUMMARY_MODE_AI;
-        CompletableFuture.runAsync(() -> generateSummaryAsync(document.getId(), mode, userId, task.getId()));
+        startAsyncTask(task.getId(), document.getId(), () -> generateSummaryAsync(document.getId(), mode, userId, task.getId()));
         return toResponse(document);
     }
 
@@ -265,16 +280,46 @@ public class DocumentService {
         DocumentTask task = createTask(document, TASK_TYPE_RETRY, document.getSummaryType(), document.getProcessingStage(), "PROCESSING");
 
         if (document.getParsedContent() == null || document.getParsedContent().isBlank()) {
-            CompletableFuture.runAsync(() -> processDocument(document.getId(), task.getId()));
+            startAsyncTask(task.getId(), document.getId(), () -> processDocument(document.getId(), task.getId()));
         } else {
             String summaryMode = document.getSummaryType();
             if (summaryMode == null || summaryMode.isBlank() || SUMMARY_MODE_EMPTY.equals(summaryMode)) {
                 summaryMode = SUMMARY_MODE_AI;
             }
             final String targetMode = summaryMode;
-            CompletableFuture.runAsync(() -> generateSummaryAsync(document.getId(), targetMode, userId, task.getId()));
+            startAsyncTask(task.getId(), document.getId(), () -> generateSummaryAsync(document.getId(), targetMode, userId, task.getId()));
         }
         return toResponse(document);
+    }
+
+    @Transactional
+    public DocumentTaskResponse cancelTask(String taskId, String userId) {
+        DocumentTask task = documentTaskRepository.findById(taskId)
+                .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+        if (!task.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("无权取消该任务");
+        }
+        if (!"PROCESSING".equals(task.getStatus())) {
+            return toTaskResponse(task);
+        }
+
+        TaskControl control = taskControls.computeIfAbsent(taskId, ignored -> new TaskControl());
+        control.cancelRequested = true;
+        task.setStatus("CANCELED");
+        task.setProcessingStage(STAGE_CANCELED);
+        task.setErrorMessage("用户已取消当前任务");
+        task.setCompletedAt(LocalDateTime.now());
+        DocumentTask savedTask = documentTaskRepository.save(task);
+
+        documentRepository.findById(task.getDocumentId()).ifPresent(document -> {
+            if ("PROCESSING".equals(document.getStatus()) || "UPLOADED".equals(document.getStatus())) {
+                document.setStatus("CANCELED");
+                document.setProcessingStage(STAGE_CANCELED);
+                document.setLastError("用户已取消当前任务");
+                documentRepository.save(document);
+            }
+        });
+        return toTaskResponse(savedTask);
     }
 
     @Transactional
@@ -330,22 +375,32 @@ public class DocumentService {
             Document document = documentRepository.findById(documentId)
                     .orElseThrow(() -> new IllegalArgumentException("文档不存在"));
             try {
+                throwIfTaskCanceled(taskId);
                 LlmConfig llmConfig = getDefaultEnabledLlmConfig(userId);
                 document.setProcessingStage(STAGE_SUMMARIZING);
                 documentRepository.save(document);
                 updateTask(taskId, "PROCESSING", STAGE_SUMMARIZING, null);
                 SummaryResult result = generateSummary(document, document.getParsedContent(), summaryMode, llmConfig);
+                throwIfTaskCanceled(taskId);
                 applySummaryResult(document, result);
                 document.setProcessingStage(STAGE_INDEXING);
                 document.setLastError(null);
                 documentRepository.save(document);
                 updateTask(taskId, "PROCESSING", STAGE_INDEXING, null);
                 reindexDocument(document, llmConfig);
+                throwIfTaskCanceled(taskId);
                 document.setStatus("SUMMARIZED");
                 document.setProcessingStage(STAGE_COMPLETED);
                 document.setLastError(null);
                 documentRepository.save(document);
                 completeTask(taskId, STAGE_COMPLETED);
+            } catch (TaskCancelledException e) {
+                log.info("Summary task canceled for document {}", documentId);
+                document.setStatus("CANCELED");
+                document.setProcessingStage(STAGE_CANCELED);
+                document.setLastError(e.getMessage());
+                documentRepository.save(document);
+                cancelTaskRecord(taskId, e.getMessage());
             } catch (Exception e) {
                 log.error("Failed to generate summary asynchronously for document {}", documentId, e);
                 document.setStatus("FAILED");
@@ -766,6 +821,21 @@ public class DocumentService {
         return new DocumentTaskListResponse(tasks.stream().map(this::toTaskResponse).toList());
     }
 
+    private void startAsyncTask(String taskId, String documentId, Runnable action) {
+        taskControls.put(taskId, new TaskControl());
+        CompletableFuture.runAsync(action).whenComplete((ignored, throwable) -> taskControls.remove(taskId));
+    }
+
+    private void throwIfTaskCanceled(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            return;
+        }
+        TaskControl control = taskControls.get(taskId);
+        if (control != null && control.cancelRequested) {
+            throw new TaskCancelledException("用户已取消当前任务");
+        }
+    }
+
     private DocumentTask createTask(Document document, String taskType, String summaryMode, String stage, String status) {
         DocumentTask task = new DocumentTask();
         task.setDocumentId(document.getId());
@@ -802,6 +872,10 @@ public class DocumentService {
 
     private void failTask(String taskId, String errorMessage) {
         updateTask(taskId, "FAILED", STAGE_FAILED, errorMessage);
+    }
+
+    private void cancelTaskRecord(String taskId, String message) {
+        updateTask(taskId, "CANCELED", STAGE_CANCELED, message);
     }
 
     private DocumentTaskResponse toTaskResponse(DocumentTask task) {
@@ -843,6 +917,16 @@ public class DocumentService {
         }
         int lastDot = filename.lastIndexOf('.');
         return lastDot == -1 ? "unknown" : filename.substring(lastDot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private static final class TaskControl {
+        private volatile boolean cancelRequested;
+    }
+
+    private static final class TaskCancelledException extends CancellationException {
+        private TaskCancelledException(String message) {
+            super(message);
+        }
     }
 
     private record ChunkPayload(int index, String type, String content) {

@@ -137,7 +137,7 @@
                 刷新状态
               </el-button>
               <el-button
-                v-if="row.status === 'FAILED'"
+                v-if="row.status === 'FAILED' || row.status === 'CANCELED'"
                 link
                 type="warning"
                 @click="handleRetry(row.id)"
@@ -196,7 +196,7 @@
               刷新状态
             </el-button>
             <el-button
-              v-if="previewDocument.status === 'FAILED'"
+              v-if="previewDocument.status === 'FAILED' || previewDocument.status === 'CANCELED'"
               type="warning"
               plain
               @click="handleRetry(previewDocument.id)"
@@ -223,7 +223,7 @@
             <div class="stage-chip">
               当前阶段：{{ getProcessingStageText(previewDocument.processingStage) }}
             </div>
-            <div v-if="previewDocument.status === 'FAILED' && previewDocument.lastError" class="error-panel">
+            <div v-if="(previewDocument.status === 'FAILED' || previewDocument.status === 'CANCELED') && previewDocument.lastError" class="error-panel">
               <div class="error-title">失败原因</div>
               <p>{{ previewDocument.lastError }}</p>
               <el-button
@@ -353,23 +353,48 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="taskDrawerVisible" title="文档任务记录" size="560px">
+    <el-drawer v-model="taskDrawerVisible" title="文档任务中心" size="720px">
       <div class="task-drawer">
         <div class="task-toolbar">
-          <span class="task-toolbar-text">展示当前知识库最近 50 条任务记录</span>
-          <el-button size="small" @click="fetchTasks">刷新</el-button>
+          <span class="task-toolbar-text">展示当前知识库最近 50 条任务记录，并支持取消进行中的后台处理</span>
+          <div class="task-toolbar-actions">
+            <el-select v-model="taskStatusFilter" size="small" class="task-filter">
+              <el-option label="全部状态" value="ALL" />
+              <el-option label="进行中" value="PROCESSING" />
+              <el-option label="已完成" value="SUCCESS" />
+              <el-option label="失败" value="FAILED" />
+              <el-option label="已取消" value="CANCELED" />
+            </el-select>
+            <el-button size="small" @click="fetchTasks">刷新</el-button>
+          </div>
         </div>
 
-        <el-empty v-if="!taskLoading && taskList.length === 0" description="当前还没有任务记录" />
+        <div class="task-summary">
+          <article class="task-summary-card">
+            <span>总任务</span>
+            <strong>{{ filteredTaskList.length }}</strong>
+          </article>
+          <article class="task-summary-card">
+            <span>进行中</span>
+            <strong>{{ processingTaskCount }}</strong>
+          </article>
+          <article class="task-summary-card">
+            <span>失败 / 取消</span>
+            <strong>{{ issueTaskCount }}</strong>
+          </article>
+        </div>
+
+        <el-empty v-if="!taskLoading && filteredTaskList.length === 0" description="当前还没有任务记录" />
 
         <div v-else v-loading="taskLoading" class="task-list">
-          <article v-for="task in taskList" :key="task.id" class="task-card">
+          <article v-for="task in filteredTaskList" :key="task.id" class="task-card">
             <div class="task-card-head">
               <div>
                 <div class="task-title">{{ task.documentTitle }}</div>
                 <div class="task-meta">
                   <span>{{ getTaskTypeText(task.taskType) }}</span>
                   <span>{{ formatTime(task.createdAt) }}</span>
+                  <span v-if="task.completedAt">结束于 {{ formatTime(task.completedAt) }}</span>
                 </div>
               </div>
               <el-tag :type="getTaskStatusTag(task.status)" effect="dark">
@@ -394,12 +419,21 @@
                 查看文档
               </el-button>
               <el-button
-                v-if="task.status === 'FAILED'"
+                v-if="task.status === 'CANCELED' || task.status === 'FAILED'"
                 link
-                type="warning"
+                type="success"
                 @click="handleRetry(task.documentId)"
               >
-                重试
+                重新处理
+              </el-button>
+              <el-button
+                v-if="task.status === 'PROCESSING'"
+                link
+                type="warning"
+                :loading="taskActionLoadingId === task.id"
+                @click="handleCancelTask(task.id)"
+              >
+                取消处理
               </el-button>
             </div>
           </article>
@@ -411,11 +445,12 @@
 
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import {
+  cancelDocumentTask,
   deleteDocument,
   generateDocumentSummary,
   getDocumentDetail,
@@ -442,6 +477,8 @@ const total = ref(0)
 const taskDrawerVisible = ref(false)
 const taskLoading = ref(false)
 const taskList = ref<DocumentTask[]>([])
+const taskStatusFilter = ref<'ALL' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'CANCELED'>('ALL')
+const taskActionLoadingId = ref('')
 
 const previewVisible = ref(false)
 const previewLoading = ref(false)
@@ -454,6 +491,18 @@ const summaryActionLoading = ref(false)
 const selectedSummaryMode = ref<SummaryMode>('AI_GENERATED')
 
 let pollingTimer: number | null = null
+
+const filteredTaskList = computed(() => {
+  if (taskStatusFilter.value === 'ALL') {
+    return taskList.value
+  }
+  return taskList.value.filter((task) => task.status === taskStatusFilter.value)
+})
+
+const processingTaskCount = computed(() => taskList.value.filter((task) => task.status === 'PROCESSING').length)
+const issueTaskCount = computed(() =>
+  taskList.value.filter((task) => task.status === 'FAILED' || task.status === 'CANCELED').length
+)
 
 function renderMarkdown(content?: string) {
   if (!content) {
@@ -497,7 +546,8 @@ function getProcessingStageText(stage?: string) {
     SUMMARIZING: '生成总结中',
     INDEXING: '建立索引中',
     COMPLETED: '已完成',
-    FAILED: '失败'
+    FAILED: '失败',
+    CANCELED: '已取消'
   }
   return stage ? (map[stage] || stage) : '未开始'
 }
@@ -507,7 +557,8 @@ function getStatusType(status: DocumentStatus) {
     UPLOADED: 'info',
     PROCESSING: 'warning',
     SUMMARIZED: 'success',
-    FAILED: 'danger'
+    FAILED: 'danger',
+    CANCELED: 'info'
   }
   return map[status]
 }
@@ -517,7 +568,8 @@ function getStatusText(status: DocumentStatus) {
     UPLOADED: '已上传',
     PROCESSING: '处理中',
     SUMMARIZED: '已完成总结',
-    FAILED: '处理失败'
+    FAILED: '处理失败',
+    CANCELED: '已取消'
   }
   return map[status]
 }
@@ -535,7 +587,8 @@ function getStatusDescription(status: DocumentStatus, stage?: string) {
     UPLOADED: '文件已经保存，等待进入解析和总结流程。',
     PROCESSING: '系统正在后台处理中。',
     SUMMARIZED: '解析文本和总结资产都已经可以编辑。',
-    FAILED: '自动处理失败，但你仍然可以手动补全文本与总结。'
+    FAILED: '自动处理失败，但你仍然可以手动补全文本与总结。',
+    CANCELED: '本次后台处理已取消，你可以稍后重新发起。'
   }
   return map[status] || '系统正在后台处理中。'
 }
@@ -582,7 +635,8 @@ function getTaskStatusText(status?: string) {
   const map: Record<string, string> = {
     PROCESSING: '进行中',
     SUCCESS: '已完成',
-    FAILED: '失败'
+    FAILED: '失败',
+    CANCELED: '已取消'
   }
   return status ? (map[status] || status) : '未知'
 }
@@ -591,7 +645,8 @@ function getTaskStatusTag(status?: string) {
   const map: Record<string, 'warning' | 'success' | 'danger' | 'info'> = {
     PROCESSING: 'warning',
     SUCCESS: 'success',
-    FAILED: 'danger'
+    FAILED: 'danger',
+    CANCELED: 'info'
   }
   return status ? (map[status] || 'info') : 'info'
 }
@@ -679,6 +734,18 @@ async function fetchTasks() {
 async function handleOpenTasks() {
   taskDrawerVisible.value = true
   await fetchTasks()
+}
+
+async function handleCancelTask(taskId: string) {
+  taskActionLoadingId.value = taskId
+  try {
+    await cancelDocumentTask(taskId)
+    ElMessage.success('任务已取消，后台会在最近的检查点停止')
+    await fetchTasks()
+    await fetchData(false)
+  } finally {
+    taskActionLoadingId.value = ''
+  }
 }
 
 async function handleKbChange() {
@@ -1206,9 +1273,44 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.task-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-filter {
+  width: 120px;
+}
+
 .task-toolbar-text {
   font-size: 13px;
   color: #6e8197;
+}
+
+.task-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.task-summary-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+  border: 1px solid #e1ebf7;
+}
+
+.task-summary-card span {
+  font-size: 12px;
+  color: #7d8ea4;
+}
+
+.task-summary-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 22px;
+  color: #203246;
 }
 
 .task-list {
@@ -1293,6 +1395,19 @@ onBeforeUnmount(() => {
 
   .dialog-actions {
     justify-content: flex-start;
+  }
+
+  .task-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .task-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-toolbar-actions {
+    justify-content: space-between;
   }
 }
 </style>

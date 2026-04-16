@@ -4,6 +4,7 @@ import com.ai.kb.dto.DocumentListResponse;
 import com.ai.kb.dto.DocumentResponse;
 import com.ai.kb.dto.DocumentSummaryRequest;
 import com.ai.kb.dto.DocumentTaskListResponse;
+import com.ai.kb.dto.DocumentTaskResponse;
 import com.ai.kb.dto.DocumentUpdateRequest;
 import com.ai.kb.dto.DocumentUploadResponse;
 import com.ai.kb.security.JwtTokenProvider;
@@ -55,6 +56,13 @@ public class DocumentController {
             @RequestParam(value = "documentId", required = false) String documentId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         return documentService.getTasks(kbId, documentId, getUserIdFromToken(authHeader));
+    }
+
+    @PostMapping("/tasks/{taskId}/cancel")
+    public DocumentTaskResponse cancelTask(
+            @PathVariable String taskId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        return documentService.cancelTask(taskId, getUserIdFromToken(authHeader));
     }
 
     @GetMapping("/{id}")

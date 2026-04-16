@@ -1,6 +1,6 @@
 import { del, get, post, put, upload } from './index'
 
-export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'SUMMARIZED' | 'FAILED'
+export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'SUMMARIZED' | 'FAILED' | 'CANCELED'
 
 export interface Document {
   id: string
@@ -99,6 +99,10 @@ export function getDocumentTaskList(params: {
   documentId?: string
 }) {
   return get<DocumentTaskListResponse>('/documents/tasks', params)
+}
+
+export function cancelDocumentTask(taskId: string) {
+  return post<DocumentTask>(`/documents/tasks/${taskId}/cancel`)
 }
 
 export function updateDocument(id: string, data: DocumentUpdateRequest) {
