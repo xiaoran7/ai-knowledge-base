@@ -1,0 +1,34 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:change-me}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  servlet:
+    multipart:
+      max-file-size: 101MB
+      max-request-size: 101MB
+
+jwt:
+  secret: ${JWT_SECRET:change-this-jwt-secret-in-production}
+  expiration: ${JWT_EXPIRATION:864000000}
+
+embedding:
+  model-dir: models/bge-small-zh-v1.5-onnx
+  model-file: onnx/model_quantized.onnx
+  query-instruction: 为这个句子生成表示以用于检索相关文章：

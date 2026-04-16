@@ -1,0 +1,32 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+.claude/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs/
+*.log
+
+# Backend build / runtime
+backend/target/
+backend/logs/
+backend/uploads/
+backend/models/
+
+# Frontend build / runtime
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Local runtime data
+uploads/
+.playwright-cli/
+
+# Env / local overrides
+*.local
