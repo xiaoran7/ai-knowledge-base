@@ -6,7 +6,9 @@ import com.ai.kb.dto.CategoryTreeResponse;
 import com.ai.kb.dto.CategoryUpdateRequest;
 import com.ai.kb.dto.KnowledgeBaseRequest;
 import com.ai.kb.dto.KnowledgeBaseResponse;
+import com.ai.kb.dto.KnowledgeGraphResponse;
 import com.ai.kb.service.CategoryService;
+import com.ai.kb.service.KnowledgeGraphService;
 import com.ai.kb.service.KnowledgeBaseService;
 import com.ai.kb.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ public class KnowledgeBaseController {
 
     private final KnowledgeBaseService knowledgeBaseService;
     private final CategoryService categoryService;
+    private final KnowledgeGraphService knowledgeGraphService;
     private final JwtTokenProvider jwtTokenProvider;
 
     /**
@@ -51,6 +54,11 @@ public class KnowledgeBaseController {
     @GetMapping("/{id}")
     public KnowledgeBaseResponse getById(@PathVariable String id) {
         return knowledgeBaseService.getById(id);
+    }
+
+    @GetMapping("/{id}/graph")
+    public KnowledgeGraphResponse getKnowledgeGraph(@PathVariable String id) {
+        return knowledgeGraphService.getKnowledgeGraph(id);
     }
 
     /**

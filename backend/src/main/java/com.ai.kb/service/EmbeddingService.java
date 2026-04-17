@@ -2,7 +2,6 @@ package com.ai.kb.service;
 
 import ai.djl.huggingface.tokenizers.Encoding;
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer;
-import ai.onnxruntime.NodeInfo;
 import ai.onnxruntime.OnnxTensor;
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
@@ -21,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -57,7 +57,11 @@ public class EmbeddingService {
 
             log.info("本地 embedding 模型加载成功: {}", modelPath);
         } catch (Exception e) {
-            throw new IllegalStateException("初始化本地 embedding 模型失败: " + e.getMessage(), e);
+            throw new IllegalStateException(
+                    "初始化本地 embedding 模型失败 (user.dir=" + System.getProperty("user.dir")
+                            + ", embedding.model-dir=" + modelDir + "): " + e.getMessage(),
+                    e
+            );
         }
     }
 
@@ -144,9 +148,27 @@ public class EmbeddingService {
     private Path resolveModelBaseDir() {
         Path configured = Paths.get(modelDir);
         if (configured.isAbsolute()) {
-            return configured;
+            return configured.normalize();
         }
-        return Paths.get(System.getProperty("user.dir")).resolve(configured).normalize();
+
+        Path userDir = Paths.get(System.getProperty("user.dir")).normalize();
+        List<Path> candidates = List.of(
+                userDir.resolve(configured).normalize(),
+                userDir.resolve("backend").resolve(configured).normalize(),
+                userDir.resolve("..").resolve(configured).normalize(),
+                userDir.resolve("..").resolve("backend").resolve(configured).normalize()
+        );
+
+        for (Path candidate : candidates) {
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+
+        String triedPaths = candidates.stream()
+                .map(Path::toString)
+                .collect(Collectors.joining("; "));
+        throw new IllegalStateException("未找到本地 embedding 模型目录，已尝试: " + triedPaths);
     }
 
     private long[] toLongArray(long[] values) {

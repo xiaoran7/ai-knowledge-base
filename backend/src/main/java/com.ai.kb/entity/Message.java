@@ -36,6 +36,9 @@ public class Message {
     @Column(columnDefinition = "TEXT")
     private String thinking;
 
+    @Column(name = "tool_calls", columnDefinition = "TEXT")
+    private String toolCalls;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

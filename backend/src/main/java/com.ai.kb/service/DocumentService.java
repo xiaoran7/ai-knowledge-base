@@ -7,6 +7,7 @@ import com.ai.kb.dto.DocumentTaskListResponse;
 import com.ai.kb.dto.DocumentTaskResponse;
 import com.ai.kb.dto.DocumentUpdateRequest;
 import com.ai.kb.dto.DocumentUploadResponse;
+import com.ai.kb.dto.CategorizationResult;
 import com.ai.kb.entity.Category;
 import com.ai.kb.entity.Document;
 import com.ai.kb.entity.DocumentChunk;
@@ -181,6 +182,7 @@ public class DocumentService {
                 SummaryResult summaryResult = generateSummary(document, parsedContent, SUMMARY_MODE_AI, llmConfig);
                 throwIfTaskCanceled(taskId);
                 applySummaryResult(document, summaryResult);
+                categorizeAndTag(document, llmConfig);
                 document.setProcessingStage(STAGE_INDEXING);
                 documentRepository.save(document);
                 updateTask(taskId, "PROCESSING", STAGE_INDEXING, null);
@@ -327,7 +329,11 @@ public class DocumentService {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在"));
         if (!document.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("无权修改此文档");
+            throw new IllegalArgumentException("无权修改该文档");
+        }
+
+        if (request.tags() != null) {
+            document.setTags(request.tags());
         }
 
         if (request.content() != null) {
@@ -383,6 +389,7 @@ public class DocumentService {
                 SummaryResult result = generateSummary(document, document.getParsedContent(), summaryMode, llmConfig);
                 throwIfTaskCanceled(taskId);
                 applySummaryResult(document, result);
+                categorizeAndTag(document, llmConfig);
                 document.setProcessingStage(STAGE_INDEXING);
                 document.setLastError(null);
                 documentRepository.save(document);
@@ -527,6 +534,27 @@ public class DocumentService {
         document.setSummaryContent(result.content());
         document.setSummaryType(result.type());
         document.setSummaryUpdatedAt(LocalDateTime.now());
+    }
+
+    private void categorizeAndTag(Document document, LlmConfig llmConfig) {
+        try {
+            List<Category> kbCategories = categoryRepository.findByKnowledgeBaseId(document.getKnowledgeBaseId());
+            CategorizationResult catResult = llmService.autoCategorize(document.getTitle(), document.getSummaryContent(), kbCategories, llmConfig);
+            if (catResult != null) {
+                if (catResult.tags() != null) {
+                    document.setTags(catResult.tags());
+                }
+                if (catResult.categoryId() != null && !catResult.categoryId().isBlank() && (document.getCategoryId() == null || document.getCategoryId().isBlank())) {
+                    boolean catExists = kbCategories.stream().anyMatch(c -> c.getId().equals(catResult.categoryId()));
+                    if (catExists) {
+                        document.setCategoryId(catResult.categoryId());
+                        updateCategoryDocumentCount(catResult.categoryId());
+                    }
+                }
+            }
+        } catch(Exception e) {
+            log.warn("Auto categorization failed for document {}", document.getId(), e);
+        }
     }
 
     private void validateCategory(String kbId, String categoryId) {
@@ -805,6 +833,7 @@ public class DocumentService {
                 doc.getProcessingStage(),
                 doc.getCategoryId(),
                 categoryName,
+                doc.getTags(),
                 doc.getCreatedAt(),
                 doc.getParsedContent(),
                 doc.getSummaryContent(),
@@ -935,4 +964,3 @@ public class DocumentService {
     private record SummaryResult(String content, String type) {
     }
 }
-

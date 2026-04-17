@@ -7,7 +7,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import App from './App.vue'
 import router from './router'
-import './styles/main.css'
+import './style.css' // Import tailwind and base styles
 
 const app = createApp(App)
 const pinia = createPinia()

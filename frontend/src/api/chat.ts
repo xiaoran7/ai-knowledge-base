@@ -8,12 +8,21 @@ export interface Source {
   score: number
 }
 
+export interface ToolCall {
+  name: string
+  title: string
+  status: string
+  summary: string
+  detail?: string
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   thinking?: string
   sources?: Source[]
+  toolCalls?: ToolCall[]
   createdAt: string
 }
 
@@ -43,6 +52,7 @@ export interface ChatResponse {
   content: string
   thinking?: string
   sources: Source[]
+  toolCalls?: ToolCall[]
 }
 
 export interface RetrievalDebugHit {

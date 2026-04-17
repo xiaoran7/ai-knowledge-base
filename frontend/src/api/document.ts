@@ -12,6 +12,7 @@ export interface Document {
   createdAt: string
   categoryId?: string
   categoryName?: string
+  tags?: string[]
   summaryContent?: string
   summaryType?: string
   summaryUpdatedAt?: string
@@ -58,6 +59,7 @@ export interface DocumentUpdateRequest {
   summaryContent?: string
   summaryMode?: string
   regenerateSummary?: boolean
+  tags?: string[]
 }
 
 export interface DocumentSummaryRequest {

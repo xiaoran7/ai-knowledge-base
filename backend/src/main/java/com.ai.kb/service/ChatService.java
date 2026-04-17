@@ -10,6 +10,7 @@ import com.ai.kb.dto.RetrievalDebugRequest;
 import com.ai.kb.dto.RetrievalDebugResponse;
 import com.ai.kb.dto.RetrievalHitResponse;
 import com.ai.kb.dto.SourceResponse;
+import com.ai.kb.dto.ToolCallResponse;
 import com.ai.kb.entity.Conversation;
 import com.ai.kb.entity.LlmConfig;
 import com.ai.kb.entity.Message;
@@ -52,6 +53,7 @@ public class ChatService {
     private final EmbeddingService embeddingService;
     private final VectorStoreService vectorStoreService;
     private final LlmService llmService;
+    private final ChatToolService chatToolService;
     private final ObjectMapper objectMapper;
 
     private static final int DEFAULT_RETRIEVAL_DEBUG_TOP_K = 8;
@@ -70,6 +72,14 @@ public class ChatService {
         String answerContent;
         String answerThinking = "";
         List<SourceResponse> sources;
+        List<ToolCallResponse> toolCalls = Collections.emptyList();
+
+        ChatToolService.ToolExecutionResult toolExecution = chatToolService.execute(
+                request.message(),
+                userId,
+                request.knowledgeBaseId()
+        );
+        toolCalls = toolExecution.toolCalls();
 
         try {
             LlmConfig llmConfig = getEnabledConfig(userId);
@@ -88,7 +98,8 @@ public class ChatService {
 
             String memoryContext = buildMemoryContext(conversation);
             String knowledgeContext = retrievalResult.context();
-            String fullContext = joinContext(memoryContext, knowledgeContext);
+            String toolContext = toolExecution.context();
+            String fullContext = joinContext(memoryContext, knowledgeContext, toolContext);
 
             LlmService.GenerationResult result = llmService.chat(request.message(), fullContext, llmConfig);
             answerContent = result.content();
@@ -106,6 +117,7 @@ public class ChatService {
         aiMessage.setContent(answerContent);
         aiMessage.setThinking(answerThinking);
         aiMessage.setSources(toJson(sources));
+        aiMessage.setToolCalls(toJsonObject(toolCalls));
         aiMessage = messageRepository.save(aiMessage);
 
         conversation.setMessageCount(conversation.getMessageCount() + 2);
@@ -118,7 +130,8 @@ public class ChatService {
                 conversation.getTitle(),
                 answerContent,
                 answerThinking,
-                sources
+                sources,
+                toolCalls
         );
     }
 
@@ -401,17 +414,10 @@ public class ChatService {
         return String.join("\n\n", parts);
     }
 
-    private String joinContext(String memoryContext, String knowledgeContext) {
-        if ((memoryContext == null || memoryContext.isBlank()) && (knowledgeContext == null || knowledgeContext.isBlank())) {
-            return "";
-        }
-        if (memoryContext == null || memoryContext.isBlank()) {
-            return knowledgeContext;
-        }
-        if (knowledgeContext == null || knowledgeContext.isBlank()) {
-            return memoryContext;
-        }
-        return memoryContext + "\n\n" + knowledgeContext;
+    private String joinContext(String... contexts) {
+        return java.util.Arrays.stream(contexts)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.joining("\n\n"));
     }
 
     private void updateConversationMemoryAndTitle(Conversation conversation, String userId) {
@@ -476,6 +482,7 @@ public class ChatService {
                 msg.getContent(),
                 msg.getThinking(),
                 parseSources(msg.getSources()),
+                parseToolCalls(msg.getToolCalls()),
                 msg.getCreatedAt()
         );
     }
@@ -543,6 +550,14 @@ public class ChatService {
         }
     }
 
+    private String toJsonObject(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JacksonException e) {
+            return "[]";
+        }
+    }
+
     private List<SourceResponse> parseSources(String json) {
         if (json == null || json.isEmpty()) {
             return Collections.emptyList();
@@ -551,6 +566,20 @@ public class ChatService {
             return objectMapper.readValue(
                     json,
                     objectMapper.getTypeFactory().constructCollectionType(List.class, SourceResponse.class)
+            );
+        } catch (JacksonException e) {
+            return Collections.emptyList();
+        }
+    }
+
+    private List<ToolCallResponse> parseToolCalls(String json) {
+        if (json == null || json.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(
+                    json,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, ToolCallResponse.class)
             );
         } catch (JacksonException e) {
             return Collections.emptyList();

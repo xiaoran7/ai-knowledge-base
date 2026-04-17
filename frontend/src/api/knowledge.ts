@@ -25,6 +25,49 @@ export interface CategoryTree {
   children: CategoryTree[]
 }
 
+export interface KnowledgeGraphNode {
+  id: string
+  type: 'DOCUMENT' | 'CATEGORY'
+  title: string
+  categoryId?: string | null
+  categoryName?: string | null
+  status?: string | null
+  summaryType?: string | null
+  tags: string[]
+  degree: number
+  inbound: number
+  outbound: number
+  virtualNode: boolean
+}
+
+export interface KnowledgeGraphEdge {
+  id: string
+  source: string
+  target: string
+  type: 'REFERENCE' | 'SHARED_TAG' | 'CATEGORY_MEMBERSHIP' | 'CATEGORY_TREE' | string
+  label?: string
+  weight: number
+}
+
+export interface KnowledgeGraphStats {
+  totalNodes: number
+  totalEdges: number
+  documentNodes: number
+  categoryNodes: number
+  referenceEdges: number
+  sharedTagEdges: number
+  membershipEdges: number
+  orphanDocuments: number
+}
+
+export interface KnowledgeGraphResponse {
+  knowledgeBaseId: string
+  knowledgeBaseName: string
+  nodes: KnowledgeGraphNode[]
+  edges: KnowledgeGraphEdge[]
+  stats: KnowledgeGraphStats
+}
+
 /**
  * 获取知识库列表
  */
@@ -44,6 +87,10 @@ export function createKnowledgeBase(data: { name: string; description: string })
  */
 export function deleteKnowledgeBase(id: string) {
   return del(`/knowledge-base/${id}`)
+}
+
+export function getKnowledgeGraph(kbId: string) {
+  return get<KnowledgeGraphResponse>(`/knowledge-base/${kbId}/graph`)
 }
 
 /**

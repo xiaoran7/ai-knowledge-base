@@ -78,6 +78,19 @@
               <span v-else class="muted-text">未分类</span>
             </template>
           </el-table-column>
+          <el-table-column label="标签" min-width="180">
+            <template #default="{ row }">
+              <div v-if="row.tags && row.tags.length" class="flex flex-wrap gap-1">
+                <el-tag v-for="tag in row.tags.slice(0, 3)" :key="tag" size="small" type="info">
+                  {{ tag }}
+                </el-tag>
+                <el-tag v-if="row.tags.length > 3" size="small" type="info">
+                  +{{ row.tags.length - 3 }}
+                </el-tag>
+              </div>
+              <span v-else class="muted-text text-sm">无标签</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="fileType" label="类型" width="100" />
           <el-table-column label="大小" width="120">
             <template #default="{ row }">
@@ -335,13 +348,35 @@
 
               <section class="summary-editor-panel">
                 <div class="section-head">
-                  <h4>总结内容</h4>
+                  <h4>总结与标签</h4>
                   <span>独立存储</span>
                 </div>
+
+                <div class="tags-editor-wrapper">
+                   <div class="summary-note-title" style="margin-bottom:8px">自动标签</div>
+                   <el-select
+                     v-model="editableTags"
+                     multiple
+                     filterable
+                     allow-create
+                     default-first-option
+                     placeholder="添加或选择标签"
+                     style="width: 100%; margin-bottom: 16px"
+                   >
+                     <el-option
+                       v-for="tag in editableTags"
+                       :key="tag"
+                       :label="tag"
+                       :value="tag"
+                     />
+                   </el-select>
+                </div>
+
+                <div class="summary-note-title" style="margin-bottom:8px">总结内容</div>
                 <el-input
                   v-model="editableSummary"
                   type="textarea"
-                  :rows="18"
+                  :rows="14"
                   placeholder="这里保存最终总结资产。选中人工编辑摘要时，可以直接在这里改写并保存。"
                 />
 
@@ -488,10 +523,11 @@ const taskActionLoadingId = ref('')
 
 const previewVisible = ref(false)
 const previewLoading = ref(false)
-const previewDocument = ref<DocumentDetail | null>(null)
-const editableContent = ref('')
-const editableSummary = ref('')
-const activePreviewTab = ref('preview')
+  const previewDocument = ref<DocumentDetail | null>(null)
+  const editableContent = ref('')
+  const editableSummary = ref('')
+  const editableTags = ref<string[]>([])
+  const activePreviewTab = ref('preview')
 const savingDocument = ref(false)
 const summaryActionLoading = ref(false)
 const selectedSummaryMode = ref<SummaryMode>('AI_GENERATED')
@@ -791,12 +827,13 @@ function handleDelete(row: Document) {
   })
 }
 
-async function syncPreviewDocument(id: string) {
-  previewDocument.value = await getDocumentDetail(id)
-  editableContent.value = previewDocument.value.content || ''
-  editableSummary.value = previewDocument.value.summaryContent || ''
-  syncSelectedSummaryMode(previewDocument.value.summaryType)
-}
+  async function syncPreviewDocument(id: string) {
+    previewDocument.value = await getDocumentDetail(id)
+    editableContent.value = previewDocument.value.content || ''
+    editableSummary.value = previewDocument.value.summaryContent || ''
+    editableTags.value = [...(previewDocument.value.tags || [])]
+    syncSelectedSummaryMode(previewDocument.value.summaryType)
+  }
 
 async function handlePreview(id: string, initialTab: 'preview' | 'summary' = 'preview') {
   previewVisible.value = true
@@ -858,16 +895,18 @@ async function handleSaveDocument() {
   if (!previewDocument.value) {
     return
   }
-  savingDocument.value = true
-  try {
-    previewDocument.value = await updateDocument(previewDocument.value.id, {
-      content: editableContent.value,
-      summaryContent: editableSummary.value,
-      summaryMode: selectedSummaryMode.value
-    })
-    editableContent.value = previewDocument.value.content || ''
-    editableSummary.value = previewDocument.value.summaryContent || ''
-    syncSelectedSummaryMode(previewDocument.value.summaryType)
+    savingDocument.value = true
+    try {
+      previewDocument.value = await updateDocument(previewDocument.value.id, {
+        content: editableContent.value,
+        summaryContent: editableSummary.value,
+        summaryMode: selectedSummaryMode.value,
+        tags: editableTags.value
+      })
+      editableContent.value = previewDocument.value.content || ''
+      editableSummary.value = previewDocument.value.summaryContent || ''
+      editableTags.value = [...(previewDocument.value.tags || [])]
+      syncSelectedSummaryMode(previewDocument.value.summaryType)
     ElMessage.success('文档内容和总结已保存，检索层已经同步更新')
     await fetchData(false)
   } finally {
@@ -904,7 +943,8 @@ async function handleApplyManualSummary() {
     previewDocument.value = await updateDocument(previewDocument.value.id, {
       content: editableContent.value,
       summaryContent: editableSummary.value,
-      summaryMode: 'MANUAL_EDITED'
+      summaryMode: 'MANUAL_EDITED',
+      tags: editableTags.value
     })
     editableContent.value = previewDocument.value.content || ''
     editableSummary.value = previewDocument.value.summaryContent || ''

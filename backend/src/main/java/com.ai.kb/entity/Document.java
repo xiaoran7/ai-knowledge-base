@@ -6,6 +6,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import com.ai.kb.config.StringListConverter;
 
 @Data
 @Entity
@@ -58,6 +60,10 @@ public class Document {
 
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
+
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "tags", columnDefinition = "TEXT")
+    private List<String> tags;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

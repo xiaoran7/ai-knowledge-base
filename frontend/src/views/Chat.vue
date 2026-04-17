@@ -1,120 +1,192 @@
-<template>
-  <div class="chat page-container">
-    <div class="chat-container">
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <h3>会话历史</h3>
-          <el-button type="primary" size="small" @click="handleNewChat">
-            <el-icon><Plus /></el-icon>
+﻿<template>
+  <div class="h-[calc(100vh-60px)] w-full flex bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div class="w-full h-full flex m-2 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md shadow-xl rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <!-- Sidebar -->
+      <aside class="w-72 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-white/50 dark:bg-gray-800/50">
+        <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">会话历史</h3>
+          <el-button type="primary" size="small" @click="handleNewChat" class="!rounded-lg">
+            <template #icon><Plus class="w-4 h-4" /></template>
             新建
           </el-button>
         </div>
-        <el-scrollbar>
-          <div class="conversation-list">
+        <el-scrollbar class="flex-1">
+          <div class="p-3 space-y-2">
             <div
               v-for="item in conversationList"
               :key="item.id"
-              class="conversation-item"
-              :class="{ active: currentConversationId === item.id }"
+              class="p-3 rounded-xl border cursor-pointer transition-all duration-200 group relative"
+              :class="currentConversationId === item.id ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800/50' : 'bg-white border-transparent hover:border-gray-200 dark:bg-gray-800/50 dark:hover:border-gray-700'"
               @click="handleSelectConversation(item)"
             >
-              <div class="conversation-title">{{ item.title || '未命名会话' }}</div>
-              <div class="conversation-meta">{{ item.messageCount }} 条消息</div>
-              <el-button text type="danger" size="small" @click.stop="handleDeleteConversation(item)">删除</el-button>
+              <div class="text-sm font-medium text-gray-900 dark:text-white truncate pr-12">{{ item.title || '未命名会话' }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ item.messageCount }} 条消息</div>
+              <el-button
+                text
+                type="danger"
+                size="small"
+                class="!absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                @click.stop="handleDeleteConversation(item)"
+              >
+                删除
+              </el-button>
             </div>
             <el-empty v-if="conversationList.length === 0" description="暂无会话" :image-size="70" />
           </div>
         </el-scrollbar>
       </aside>
 
-      <section class="main">
-        <div class="main-header">
+      <!-- Main Chat Area -->
+      <section class="flex-1 flex flex-col min-w-0">
+        <!-- Header -->
+        <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-white/50 dark:bg-gray-800/50">
           <div>
-            <div class="chat-title">{{ currentConversationTitle || '新会话' }}</div>
-            <div class="chat-subtitle">{{ knowledgeStore.currentKb?.name || '请先选择知识库' }}</div>
+            <div class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <MessageSquare class="w-5 h-5 text-blue-500" />
+              {{ currentConversationTitle || '新会话' }}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
+              <Database class="w-3 h-3" />
+              {{ knowledgeStore.currentKb?.name || '请先选择知识库' }}
+            </div>
           </div>
-          <div class="header-actions">
-            <el-button v-if="knowledgeStore.currentKbId" @click="handleOpenRetrievalDebug">检索调试</el-button>
-            <el-button v-if="currentConversationId" @click="memoryDrawerVisible = true">会话记忆</el-button>
-            <el-button v-if="currentConversationId" @click="handleExport('markdown')">导出 Markdown</el-button>
-            <el-button v-if="currentConversationId" @click="handleExport('pdf')">导出 PDF</el-button>
+          <div class="flex gap-2">
+            <el-button v-if="knowledgeStore.currentKbId" size="small" @click="handleOpenRetrievalDebug" plain>检索调试</el-button>
+            <el-button v-if="currentConversationId" size="small" @click="memoryDrawerVisible = true" plain>会话记忆</el-button>
+            <el-button v-if="currentConversationId" size="small" @click="handleExport('markdown')" plain>导出 Markdown</el-button>
+            <el-button v-if="currentConversationId" size="small" @click="handleExport('pdf')" plain>导出 PDF</el-button>
           </div>
         </div>
 
-        <div class="message-panel">
+        <!-- Messages -->
+        <div class="flex-1 p-4 overflow-hidden">
           <el-scrollbar ref="scrollbarRef">
-            <div v-for="msg in messages" :key="msg.id" class="message-item" :class="msg.role">
-              <el-avatar
-                class="message-avatar"
-                :src="msg.role === 'user' ? userAvatarPreview || undefined : assistantAvatarPreview || undefined"
-                :icon="msg.role === 'user' ? (!userAvatarPreview ? User : undefined) : (!assistantAvatarPreview ? ChatDotRound : undefined)"
-              >
-                <template v-if="msg.role === 'assistant' && !assistantAvatarPreview">AI</template>
-                <template v-else-if="msg.role === 'user' && !userAvatarPreview">{{ userInitial }}</template>
-              </el-avatar>
+            <div class="max-w-4xl mx-auto space-y-6 pb-4">
+              <div v-for="msg in messages" :key="msg.id" class="flex gap-4" :class="msg.role === 'user' ? 'flex-row-reverse' : ''">
+                <!-- Avatar -->
+                <el-avatar
+                  class="shrink-0 shadow-sm"
+                  :src="msg.role === 'user' ? userAvatarPreview || undefined : assistantAvatarPreview || undefined"
+                  :icon="msg.role === 'user' ? (!userAvatarPreview ? User : undefined) : (!assistantAvatarPreview ? Bot : undefined)"
+                >
+                  <template v-if="msg.role === 'assistant' && !assistantAvatarPreview">AI</template>
+                  <template v-else-if="msg.role === 'user' && !userAvatarPreview">{{ userInitial }}</template>
+                </el-avatar>
 
-              <div class="message-body">
-                <div class="bubble">
-                  <div v-html="renderContent(msg.content)" class="message-text"></div>
-                </div>
-
-                <div v-if="msg.thinking" class="thinking-box">
-                  <button
-                    type="button"
-                    class="thinking-toggle"
-                    :class="{ expanded: isThinkingExpanded(msg.id) }"
-                    @click="toggleThinking(msg.id)"
+                <!-- Message Body -->
+                <div class="flex flex-col max-w-[80%]" :class="msg.role === 'user' ? 'items-end' : 'items-start'">
+                  <div
+                    class="px-5 py-3.5 rounded-2xl shadow-sm text-sm"
+                    :class="msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-tl-sm'"
                   >
-                    <span>思考过程 {{ formatThinkingMeta(msg.thinking) }}</span>
-                    <el-icon><ArrowRight /></el-icon>
-                  </button>
-                  <pre v-if="isThinkingExpanded(msg.id)" class="thinking-content">{{ msg.thinking }}</pre>
-                </div>
-
-                <div v-if="msg.sources?.length" class="sources">
-                  <div class="sources-title">引用来源</div>
-                  <div v-for="(source, index) in msg.sources" :key="index" class="source-card">
-                    <div class="source-head">
-                      <el-tag size="small" type="success">{{ source.documentTitle }}</el-tag>
-                      <span>{{ Math.round((source.score || 0) * 100) }}%</span>
-                    </div>
-                    <div class="source-content">{{ source.content }}</div>
+                    <div v-html="renderContent(msg.content)" class="prose dark:prose-invert max-w-none break-words"></div>
                   </div>
-                </div>
 
-                <div class="message-time">{{ formatTime(msg.createdAt) }}</div>
+                  <div v-if="msg.toolCalls?.length" class="mt-2 w-full space-y-2">
+                    <div class="text-xs text-gray-500 flex items-center gap-1.5">
+                      <Database class="w-3.5 h-3.5" />
+                      已执行工具
+                    </div>
+                    <div
+                      v-for="tool in msg.toolCalls"
+                      :key="`${msg.id}-${tool.name}-${tool.title}`"
+                      class="rounded-2xl border px-4 py-3"
+                      :class="tool.status === 'success'
+                        ? 'border-sky-100 bg-sky-50/70 dark:border-sky-900/30 dark:bg-sky-900/10'
+                        : 'border-rose-100 bg-rose-50/70 dark:border-rose-900/30 dark:bg-rose-900/10'"
+                    >
+                      <div class="flex items-start justify-between gap-3">
+                        <div>
+                          <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ tool.title }}</div>
+                          <div class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ tool.summary }}</div>
+                        </div>
+                        <el-tag
+                          size="small"
+                          :type="tool.status === 'success' ? 'success' : 'danger'"
+                          class="!rounded-full !px-3 shrink-0"
+                        >
+                          {{ tool.status === 'success' ? '成功' : '失败' }}
+                        </el-tag>
+                      </div>
+                      <pre
+                        v-if="tool.detail"
+                        class="mt-2 whitespace-pre-wrap rounded-xl bg-white/70 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900/30 dark:text-gray-300"
+                      >{{ tool.detail }}</pre>
+                    </div>
+                  </div>
+
+                  <!-- Thinking Box -->
+                  <div v-if="msg.thinking" class="mt-2 w-full max-w-full">
+                    <button
+                      type="button"
+                      class="flex w-full items-center justify-between px-3 py-2 text-xs rounded-xl border border-blue-100 bg-blue-50/50 text-blue-700 hover:bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/10 dark:text-blue-400 transition-colors"
+                      @click="toggleThinking(msg.id)"
+                    >
+                      <span class="flex items-center gap-1.5"><Brain class="w-3.5 h-3.5" /> 思考过程 {{ formatThinkingMeta(msg.thinking) }}</span>
+                      <ChevronRight class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-90': isThinkingExpanded(msg.id) }" />
+                    </button>
+                    <pre v-if="isThinkingExpanded(msg.id)" class="mt-1.5 p-3 rounded-xl border border-gray-100 bg-gray-50 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400 whitespace-pre-wrap font-mono">{{ msg.thinking }}</pre>
+                  </div>
+
+                  <!-- Sources -->
+                  <div v-if="msg.sources?.length" class="mt-2 w-full">
+                    <div class="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5"><FileText class="w-3.5 h-3.5" /> 引用来源</div>
+                    <div v-for="(source, index) in msg.sources" :key="index" class="p-3 mb-2 rounded-xl border border-green-100 bg-green-50/30 dark:border-green-900/30 dark:bg-green-900/10">
+                      <div class="flex justify-between items-start gap-2 mb-1.5">
+                        <el-tag size="small" type="success" class="!rounded-md max-w-full truncate">{{ source.documentTitle }}</el-tag>
+                        <span class="text-xs font-mono text-green-600 dark:text-green-400 shrink-0">{{ Math.round((source.score || 0) * 100) }}%</span>
+                      </div>
+                      <div class="text-xs text-gray-600 dark:text-gray-400 line-clamp-3 hover:line-clamp-none transition-all">{{ source.content }}</div>
+                    </div>
+                  </div>
+
+                  <div class="text-[11px] text-gray-400 mt-1.5">{{ formatTime(msg.createdAt) }}</div>
+                </div>
               </div>
             </div>
           </el-scrollbar>
         </div>
 
-        <div class="input-panel">
-          <el-input
-            v-model="inputMessage"
-            type="textarea"
-            :rows="4"
-            placeholder="输入你的问题，按 Ctrl+Enter 发送"
-            :disabled="sending"
-            @keydown.ctrl.enter.prevent="handleSend"
-          />
-          <div class="input-footer">
-            <span class="draft-hint">当前输入会自动保存在本地，切换页面不会丢失。</span>
-            <div class="footer-actions">
-              <el-button v-if="sending" @click="handleAbort">停止生成</el-button>
-              <el-button type="primary" :loading="sending" @click="handleSend">
-                <el-icon><Promotion /></el-icon>
-                发送
-              </el-button>
+        <!-- Input Panel -->
+        <div class="p-4 border-t border-gray-100 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80">
+          <div class="max-w-4xl mx-auto">
+            <div class="relative rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
+              <el-input
+                v-model="inputMessage"
+                type="textarea"
+                :rows="4"
+                placeholder="输入你的问题，按 Ctrl+Enter 发送"
+                :disabled="sending"
+                class="!border-none"
+                input-style="box-shadow: none; background: transparent; padding: 12px 16px; border-radius: 12px;"
+                @keydown.ctrl.enter.prevent="handleSend"
+              />
+              <div class="absolute bottom-3 right-3 flex items-center gap-2">
+                <span class="text-xs text-gray-400 hidden sm:inline-block">Ctrl + Enter</span>
+                <el-button v-if="sending" @click="handleAbort" type="danger" plain size="small" class="!rounded-lg">
+                  <template #icon><Square class="w-4 h-4" /></template>
+                  停止
+                </el-button>
+                <el-button type="primary" :loading="sending" @click="handleSend" size="small" class="!rounded-lg">
+                  <template #icon><Send class="w-4 h-4" /></template>
+                  发送
+                </el-button>
+              </div>
             </div>
+            <div class="mt-2 text-center text-xs text-gray-400">当前输入会自动保存在本地，切换页面不会丢失。</div>
           </div>
         </div>
       </section>
     </div>
 
+    <!-- Drawers remain standard Element Plus for now, but apply Tailwind utility classes where easy -->
     <el-drawer v-model="memoryDrawerVisible" title="会话记忆" size="480px">
       <el-empty v-if="!currentConversationId" description="请先进入一个已有会话" />
       <template v-else>
-        <div class="memory-tip">这里保存当前会话的压缩摘要与长期事实，用于长对话续航。</div>
+        <div class="mb-4 p-3 rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 text-sm flex items-start gap-2">
+           <Info class="w-4 h-4 mt-0.5 shrink-0" />
+           这里保存当前会话的压缩摘要与长期事实，用于长对话续航。
+        </div>
         <el-form label-position="top">
           <el-form-item label="会话摘要">
             <el-input v-model="memoryForm.sessionSummary" type="textarea" :rows="8" maxlength="4000" show-word-limit />
@@ -123,7 +195,7 @@
             <el-input v-model="memoryForm.sessionFacts" type="textarea" :rows="8" maxlength="4000" show-word-limit />
           </el-form-item>
         </el-form>
-        <div class="drawer-actions">
+        <div class="flex gap-3 justify-end mt-6">
           <el-button @click="handleClearMemory">清空记忆</el-button>
           <el-button type="primary" :loading="memorySaving" @click="handleSaveMemory">保存记忆</el-button>
         </div>
@@ -131,44 +203,45 @@
     </el-drawer>
 
     <el-drawer v-model="retrievalDrawerVisible" title="检索调试" size="720px">
-      <div class="debug-toolbar">
+      <div class="space-y-4">
         <el-input
           v-model="retrievalForm.query"
           type="textarea"
           :rows="3"
           placeholder="输入一个问题，查看 query rewrite 和向量检索命中结果"
         />
-        <div class="debug-toolbar-actions">
-          <el-input-number v-model="retrievalForm.topK" :min="1" :max="20" />
+        <div class="flex items-center gap-3 justify-end">
+          <span class="text-sm text-gray-500">Top K:</span>
+          <el-input-number v-model="retrievalForm.topK" :min="1" :max="20" size="small" />
           <el-button type="primary" :loading="retrievalLoading" @click="handleRunRetrievalDebug">开始调试</el-button>
         </div>
       </div>
 
       <template v-if="retrievalDebugData">
-        <div class="debug-summary">
-          <div><strong>原始问题：</strong>{{ retrievalDebugData.originalQuery }}</div>
-          <div><strong>改写问题：</strong>{{ retrievalDebugData.rewrittenQuery || '未触发改写' }}</div>
-          <div><strong>最终采用：</strong>{{ retrievalDebugData.usedQuery }}</div>
+        <div class="mt-6 p-4 rounded-xl border border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 space-y-2 text-sm">
+          <div><strong class="text-gray-900 dark:text-gray-100">原始问题：</strong><span class="text-gray-600 dark:text-gray-400">{{ retrievalDebugData.originalQuery }}</span></div>
+          <div><strong class="text-gray-900 dark:text-gray-100">改写问题：</strong><span class="text-gray-600 dark:text-gray-400">{{ retrievalDebugData.rewrittenQuery || '未触发改写' }}</span></div>
+          <div><strong class="text-gray-900 dark:text-gray-100">最终采用：</strong><span class="text-gray-600 dark:text-gray-400">{{ retrievalDebugData.usedQuery }}</span></div>
         </div>
 
-        <div class="debug-section">
-          <div class="debug-section-head">
-            <h4>最终命中</h4>
-            <span>{{ retrievalDebugData.finalHits.length }} 条</span>
+        <div class="mt-6">
+          <div class="flex justify-between items-center mb-4">
+            <h4 class="font-medium text-gray-900 dark:text-gray-100">最终命中</h4>
+            <span class="text-sm text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">{{ retrievalDebugData.finalHits.length }} 条</span>
           </div>
-          <div v-if="retrievalDebugData.finalHits.length" class="debug-hit-list">
-            <div v-for="hit in retrievalDebugData.finalHits" :key="`final-${hit.chunkId}`" class="debug-hit">
-              <div class="debug-hit-head">
-                <strong>{{ hit.documentTitle || '未命名文档' }}</strong>
-                <div class="debug-hit-tags">
-                  <el-tag size="small" :type="hit.chunkType === 'summary' ? 'success' : 'info'">
+          <div v-if="retrievalDebugData.finalHits.length" class="space-y-3">
+            <div v-for="hit in retrievalDebugData.finalHits" :key="`final-${hit.chunkId}`" class="p-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <div class="flex justify-between items-start gap-3 mb-2">
+                <strong class="text-sm text-gray-900 dark:text-white">{{ hit.documentTitle || '未命名文档' }}</strong>
+                <div class="flex items-center gap-2 shrink-0">
+                  <el-tag size="small" :type="hit.chunkType === 'summary' ? 'success' : 'info'" class="!rounded-md">
                     {{ hit.chunkType || 'unknown' }}
                   </el-tag>
-                  <el-tag size="small" effect="plain">chunk {{ hit.chunkIndex }}</el-tag>
-                  <span>{{ Math.round((hit.score || 0) * 100) }}%</span>
+                  <el-tag size="small" effect="plain" class="!rounded-md">chunk {{ hit.chunkIndex }}</el-tag>
+                  <span class="text-xs font-mono text-gray-500">{{ Math.round((hit.score || 0) * 100) }}%</span>
                 </div>
               </div>
-              <div class="debug-hit-content">{{ hit.content }}</div>
+              <div class="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{{ hit.content }}</div>
             </div>
           </div>
           <el-empty v-else description="当前问题没有命中检索结果" :image-size="60" />
@@ -218,7 +291,7 @@ import axios from 'axios'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowRight, ChatDotRound, Plus, Promotion, User } from '@element-plus/icons-vue'
+import { Brain, ChevronRight, Database, FileText, Info, MessageSquare, Plus, Send, Square, Bot, User } from 'lucide-vue-next'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useUserStore } from '@/stores/user'
 import { chat, debugRetrieval, deleteConversation, exportConversation, getConversationDetail, getConversationList, updateConversationMemory } from '@/api/chat'
@@ -360,7 +433,7 @@ async function handleSelectConversation(item: Conversation) {
 }
 
 function handleDeleteConversation(item: Conversation) {
-  ElMessageBox.confirm(`确定删除会话“${item.title}”吗？`, '提示', { type: 'warning' }).then(async () => {
+  ElMessageBox.confirm(`确认删除会话“${item.title}”？`, '提示', { type: 'warning' }).then(async () => {
     await deleteConversation(item.id)
     if (currentConversationId.value === item.id) handleNewChat()
     await loadConversationList()
@@ -371,7 +444,7 @@ function handleDeleteConversation(item: Conversation) {
 async function handleSend() {
   if (!inputMessage.value.trim()) return
   if (!knowledgeStore.currentKbId) {
-    ElMessage.warning('请先选择知识库')
+    ElMessage.warning('请先选择知识库进行提问')
     return
   }
 
@@ -399,6 +472,7 @@ async function handleSend() {
       content: res.content,
       thinking: res.thinking,
       sources: res.sources,
+      toolCalls: res.toolCalls,
       createdAt: new Date().toISOString()
     })
 
@@ -412,7 +486,7 @@ async function handleSend() {
     persistChatState()
   } catch (error) {
     if (axios.isCancel(error) || (error as { code?: string })?.code === 'ERR_CANCELED') {
-      ElMessage.info('已停止生成')
+      ElMessage.info('请求已取消')
     } else {
       messages.value = messages.value.filter((item) => item.id !== userMessage.id)
       persistChatState()
@@ -447,7 +521,7 @@ async function handleSaveMemory() {
       sessionFacts: memoryForm.sessionFacts
     })
     syncMemory(detail)
-    ElMessage.success('会话记忆已保存')
+    ElMessage.success('记忆保存成功')
   } finally {
     memorySaving.value = false
   }
@@ -466,7 +540,7 @@ function getDefaultRetrievalQuery() {
 
 async function handleOpenRetrievalDebug() {
   if (!knowledgeStore.currentKbId) {
-    ElMessage.warning('请先选择知识库')
+    ElMessage.warning('请先选择知识库进行检索调试')
     return
   }
   retrievalDrawerVisible.value = true
@@ -476,11 +550,11 @@ async function handleOpenRetrievalDebug() {
 
 async function handleRunRetrievalDebug() {
   if (!knowledgeStore.currentKbId) {
-    ElMessage.warning('请先选择知识库')
+    ElMessage.warning('请先选择知识库进行检索调试')
     return
   }
   if (!retrievalForm.value.query.trim()) {
-    ElMessage.warning('请输入要调试的问题')
+    ElMessage.warning('请输入问题进行检索调试')
     return
   }
   retrievalLoading.value = true
@@ -494,7 +568,7 @@ async function handleRunRetrievalDebug() {
     const message =
       typeof error === 'object' && error && 'message' in error && typeof error.message === 'string'
         ? error.message
-        : '妫€绱㈣皟璇曞け璐ワ紝璇风◢鍚庨噸璇?'
+        : '检索调试失败，请稍后重试'
     ElMessage.error(message)
   } finally {
     retrievalLoading.value = false
@@ -547,42 +621,5 @@ watch(selectedConversation, (value) => {
 </script>
 
 <style scoped>
-.chat { padding: 0; height: calc(100vh - 60px); }
-.chat-container { display: flex; height: 100%; background: linear-gradient(180deg, #fff 0%, #f8fbff 100%); border-radius: 12px; overflow: hidden; }
-.sidebar { width: 300px; border-right: 1px solid #e6edf5; display: flex; flex-direction: column; background: rgba(255,255,255,.92); }
-.sidebar-header, .main-header { padding: 18px 16px; border-bottom: 1px solid #e6edf5; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-.sidebar-header h3, .debug-section-head h4 { margin: 0; }
-.conversation-list { padding: 10px; }
-.conversation-item { padding: 12px; border: 1px solid transparent; border-radius: 12px; margin-bottom: 8px; background: #fff; cursor: pointer; }
-.conversation-item.active { background: #edf5ff; border-color: #bfdcff; }
-.conversation-title { font-size: 14px; color: #223046; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.conversation-meta, .message-time, .draft-hint, .debug-section-head span { font-size: 12px; color: #7b8ba1; }
-.main { flex: 1; display: flex; flex-direction: column; }
-.chat-title { font-size: 18px; font-weight: 600; color: #1f2a3d; }
-.chat-subtitle { margin-top: 4px; font-size: 13px; color: #7b8ba1; }
-.header-actions, .footer-actions, .drawer-actions, .debug-toolbar-actions, .debug-hit-tags { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.message-panel { flex: 1; padding: 24px; overflow: auto; }
-.message-item { display: flex; gap: 12px; margin-bottom: 22px; }
-.message-item.user { flex-direction: row-reverse; }
-.message-avatar { flex-shrink: 0; }
-.message-body { max-width: min(76%, 900px); }
-.message-item.user .message-body { text-align: right; }
-.bubble { display: inline-block; padding: 14px 16px; border-radius: 16px; border: 1px solid #e6edf5; background: #fff; box-shadow: 0 12px 32px rgba(27,46,94,.04); }
-.message-item.user .bubble { background: linear-gradient(135deg, #409eff, #5cabff); color: #fff; border-color: transparent; }
-.message-text { font-size: 14px; line-height: 1.75; word-break: break-word; }
-.message-text :deep(p) { margin: 0 0 10px; }
-.message-text :deep(p:last-child) { margin-bottom: 0; }
-.thinking-box, .sources { margin-top: 10px; }
-.thinking-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; border: 1px solid #d9e7f7; border-radius: 14px; background: #f6faff; padding: 10px 14px; cursor: pointer; color: #35506f; }
-.thinking-toggle.expanded :deep(svg) { transform: rotate(90deg); }
-.thinking-content, .debug-hit-content, .source-content { white-space: pre-wrap; word-break: break-word; line-height: 1.7; }
-.thinking-content { margin: 8px 0 0; padding: 12px; border-radius: 14px; border: 1px solid #d9e7f7; background: #fbfdff; font-size: 12px; color: #48617d; }
-.sources-title { font-size: 12px; color: #71839a; margin-bottom: 8px; }
-.source-card, .debug-hit, .debug-summary { padding: 12px; border: 1px solid #dce9f8; border-radius: 12px; background: #fff; margin-bottom: 10px; }
-.source-head, .debug-hit-head, .debug-section-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-.input-panel { border-top: 1px solid #e6edf5; padding: 18px 20px; background: rgba(255,255,255,.86); }
-.input-footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 12px; }
-.memory-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; background: #f7fbff; color: #637892; line-height: 1.7; }
-.debug-toolbar, .debug-section { display: grid; gap: 14px; }
-@media (max-width: 960px) { .sidebar { width: 240px; } .message-body { max-width: 85%; } .main-header, .input-footer { flex-direction: column; align-items: stretch; } }
+/* Scoped styles completely removed as we are using Tailwind CSS entirely */
 </style>

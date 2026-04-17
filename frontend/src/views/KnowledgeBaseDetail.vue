@@ -125,6 +125,19 @@
           </el-table-column>
         </el-table>
       </el-tab-pane>
+
+      <el-tab-pane label="知识网络" name="graph">
+        <div class="tab-header">
+          <el-button type="primary" :loading="graphLoading" @click="loadKnowledgeGraph">
+            刷新网络
+          </el-button>
+        </div>
+
+        <KnowledgeGraphView
+          v-if="knowledgeGraph"
+          :graph="knowledgeGraph"
+        />
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="uploadDialogVisible" title="上传文档" width="500px">
@@ -210,14 +223,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules, UploadFile } from 'element-plus'
 import { ChatDotRound, Back, Upload, FolderAdd } from '@element-plus/icons-vue'
+import KnowledgeGraphView from '@/components/KnowledgeGraphView.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import {
   createCategory,
   deleteCategory,
   getCategoryTree,
+  getKnowledgeGraph,
   getKnowledgeBaseList,
   updateCategory,
   type CategoryTree,
+  type KnowledgeGraphResponse,
   type KnowledgeBase
 } from '@/api/knowledge'
 import {
@@ -241,6 +257,8 @@ const knowledgeStore = useKnowledgeStore()
 const kbId = computed(() => route.params.id as string)
 const kbInfo = ref<KnowledgeBase | null>(null)
 const activeTab = ref('documents')
+const graphLoading = ref(false)
+const knowledgeGraph = ref<KnowledgeGraphResponse | null>(null)
 
 const docLoading = ref(false)
 const documentList = ref<Document[]>([])
@@ -280,6 +298,12 @@ onMounted(async () => {
   await loadDocuments()
 })
 
+watch(activeTab, async (tab) => {
+  if (tab === 'graph' && !knowledgeGraph.value) {
+    await loadKnowledgeGraph()
+  }
+})
+
 watch(selectedCategoryId, async () => {
   docPage.value = 1
   await loadDocuments()
@@ -311,6 +335,15 @@ async function loadDocuments() {
     docTotal.value = res.total
   } finally {
     docLoading.value = false
+  }
+}
+
+async function loadKnowledgeGraph() {
+  graphLoading.value = true
+  try {
+    knowledgeGraph.value = await getKnowledgeGraph(kbId.value)
+  } finally {
+    graphLoading.value = false
   }
 }
 

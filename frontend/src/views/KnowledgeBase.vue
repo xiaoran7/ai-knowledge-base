@@ -1,58 +1,208 @@
 <template>
-  <div class="knowledge-base page-container">
-    <div class="page-header">
-      <h2>知识库管理</h2>
-      <el-button type="primary" @click="showCreateDialog">
-        <el-icon><Plus /></el-icon>
-        新建知识库
-      </el-button>
-    </div>
+  <div class="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 text-slate-900">
+    <section class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div class="kb-card kb-hero overflow-hidden">
+        <div class="kb-hero__orb kb-hero__orb--blue"></div>
+        <div class="kb-hero__orb kb-hero__orb--mint"></div>
+        <div class="relative z-10 space-y-5">
+          <span class="kb-tag">
+            <Library class="h-4 w-4" />
+            Knowledge spaces
+          </span>
+          <div class="space-y-3">
+            <h1 class="kb-hero-title text-slate-950">
+              用独立知识库把资料、摘要和对话上下文清晰分层。
+            </h1>
+            <p class="max-w-2xl text-sm leading-7 text-slate-600 md:text-[15px]">
+              每个知识库都是一个可持续工作的空间。你可以按项目、客户、主题或部门隔离资料，避免检索结果和会话记忆互相污染。
+            </p>
+          </div>
 
-    <el-card v-loading="loading">
-      <el-empty v-if="knowledgeBaseList.length === 0" description="暂无知识库，点击上方按钮创建" />
+          <div class="flex flex-wrap gap-3">
+            <button class="kb-primary-btn" @click="showCreateDialog">
+              <Plus class="h-4 w-4" />
+              新建知识库
+            </button>
+            <button class="kb-secondary-btn" @click="$router.push('/documents')">
+              <FileStack class="h-4 w-4" />
+              前往文档管理
+            </button>
+          </div>
+        </div>
+      </div>
 
-      <el-table v-else :data="knowledgeBaseList" style="width: 100%">
-        <el-table-column prop="name" label="名称" />
-        <el-table-column prop="description" label="描述" />
-        <el-table-column prop="documentCount" label="文档数" width="100" />
-        <el-table-column prop="createdAt" label="创建时间" width="180" />
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="handleEnter(row)">
-              进入
-            </el-button>
-            <el-button link type="danger" @click="handleDelete(row)">
+      <div class="kb-card space-y-5">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="kb-eyebrow">Overview</p>
+            <h2 class="text-xl font-semibold text-slate-950">空间概览</h2>
+          </div>
+          <div class="kb-icon-badge kb-icon-badge--blue">
+            <Database class="h-5 w-5" />
+          </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <article class="kb-stat">
+            <span class="kb-stat__label">知识库总数</span>
+            <strong class="kb-stat__value">{{ knowledgeBaseList.length }}</strong>
+          </article>
+          <article class="kb-stat">
+            <span class="kb-stat__label">当前选中</span>
+            <strong class="kb-stat__value">{{ knowledgeStore.currentKb?.name || '未选择' }}</strong>
+          </article>
+        </div>
+
+        <div class="kb-divider"></div>
+
+        <div class="space-y-3 text-sm leading-7 text-slate-600">
+          <p>建议按业务边界建库，而不是把所有资料塞进同一个空间。</p>
+          <p>这样可以让摘要、向量检索和会话记忆都更稳定，也更方便后续做权限和归档扩展。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="kb-card overflow-hidden" v-loading="loading">
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p class="kb-eyebrow">Knowledge base list</p>
+          <h2 class="text-xl font-semibold text-slate-950">管理知识库</h2>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button class="kb-secondary-btn" @click="loadData">
+            <RefreshCw class="h-4 w-4" />
+            刷新列表
+          </button>
+          <button class="kb-primary-btn" @click="showCreateDialog">
+            <Plus class="h-4 w-4" />
+            新建知识库
+          </button>
+        </div>
+      </div>
+
+      <div v-if="knowledgeBaseList.length === 0" class="kb-empty">
+        <div class="kb-empty__icon">
+          <FolderKanban class="h-7 w-7" />
+        </div>
+        <h3>还没有知识库空间</h3>
+        <p>先建一个容器，后续上传的文档、摘要和对话都会围绕它组织。</p>
+        <button class="kb-primary-btn" @click="showCreateDialog">
+          <Plus class="h-4 w-4" />
+          立即创建
+        </button>
+      </div>
+
+      <div v-else class="grid gap-4 xl:grid-cols-2">
+        <article
+          v-for="kb in knowledgeBaseList"
+          :key="kb.id"
+          class="kb-list-card"
+          :class="{ 'is-current': knowledgeStore.currentKbId === kb.id }"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div class="space-y-3">
+              <div class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                {{ knowledgeStore.currentKbId === kb.id ? '当前空间' : '知识空间' }}
+              </div>
+              <div>
+                <h3 class="text-xl font-semibold text-slate-950">{{ kb.name }}</h3>
+                <p class="mt-2 text-sm leading-7 text-slate-600">
+                  {{ kb.description || '这个知识库还没有描述，可以补充它的业务范围、资料边界或适用场景。' }}
+                </p>
+              </div>
+            </div>
+            <div class="kb-list-card__count">
+              <span>文档数</span>
+              <strong>{{ kb.documentCount ?? 0 }}</strong>
+            </div>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="kb-meta">
+              <span class="kb-meta__label">创建时间</span>
+              <strong class="kb-meta__value">{{ formatDate(kb.createdAt) }}</strong>
+            </div>
+            <div class="kb-meta">
+              <span class="kb-meta__label">知识状态</span>
+              <strong class="kb-meta__value">{{ knowledgeStore.currentKbId === kb.id ? '已接入当前工作区' : '可切换使用' }}</strong>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-3">
+            <button class="kb-primary-btn" @click="handleEnter(kb)">
+              <ArrowRight class="h-4 w-4" />
+              进入空间
+            </button>
+            <button class="kb-secondary-btn" @click="handleEdit(kb)">
+              <Edit class="h-4 w-4" />
+              编辑说明
+            </button>
+            <button class="kb-danger-btn" @click="handleDelete(kb)">
+              <Trash2 class="h-4 w-4" />
               删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
 
-    <!-- 创建知识库对话框 -->
-    <el-dialog v-model="createDialogVisible" title="新建知识库" width="400px">
-      <el-form ref="formRef" :model="createForm" :rules="createRules" label-width="80px">
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="createForm.name" placeholder="请输入知识库名称" />
-        </el-form-item>
-        <el-form-item label="描述" prop="description">
-          <el-input v-model="createForm.description" type="textarea" placeholder="请输入描述（可选）" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="createLoading" @click="handleCreate">创建</el-button>
-      </template>
+    <el-dialog
+      v-model="createDialogVisible"
+      :title="dialogMode === 'create' ? '新建知识库' : '编辑知识库'"
+      width="560px"
+      append-to-body
+      destroy-on-close
+      class="kb-dialog"
+    >
+      <div class="space-y-6">
+        <div class="rounded-[24px] border border-slate-200/70 bg-slate-50/80 p-5">
+          <p class="text-sm leading-7 text-slate-600">
+            为这个空间取一个稳定的名字，并说明它的资料范围。后续上传的文档、摘要和问答上下文都会围绕这里组织。
+          </p>
+        </div>
+
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="submitForm">
+          <el-form-item label="名称" prop="name">
+            <el-input v-model="form.name" placeholder="例如：编程竞赛知识库 / 客户支持 FAQ" />
+          </el-form-item>
+          <el-form-item label="描述" prop="description">
+            <el-input
+              v-model="form.description"
+              type="textarea"
+              :rows="4"
+              placeholder="补充说明资料边界、检索用途和适用场景"
+            />
+          </el-form-item>
+        </el-form>
+
+        <div class="flex justify-end gap-3">
+          <button class="kb-secondary-btn" @click="createDialogVisible = false">取消</button>
+          <button class="kb-primary-btn" :disabled="submitLoading" @click="submitForm">
+            <Loader2 v-if="submitLoading" class="h-4 w-4 animate-spin" />
+            <span v-else>保存知识库</span>
+          </button>
+        </div>
+      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
-import type { FormInstance, FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import {
+  ArrowRight,
+  Database,
+  Edit,
+  FileStack,
+  FolderKanban,
+  Library,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2
+} from 'lucide-vue-next'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import type { KnowledgeBase } from '@/api/knowledge'
 
@@ -60,94 +210,384 @@ const router = useRouter()
 const knowledgeStore = useKnowledgeStore()
 
 const loading = ref(false)
-// 直接使用 store 的列表
-const knowledgeBaseList = computed(() => knowledgeStore.knowledgeBaseList)
+const knowledgeBaseList = ref<KnowledgeBase[]>([])
 
-// 创建对话框
 const createDialogVisible = ref(false)
-const createLoading = ref(false)
+const dialogMode = ref<'create' | 'edit'>('create')
+const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
-const createForm = reactive({
+
+const form = ref({
+  id: '',
   name: '',
   description: ''
 })
-const createRules: FormRules = {
+
+const rules: FormRules = {
   name: [
     { required: true, message: '请输入知识库名称', trigger: 'blur' },
-    { min: 2, max: 50, message: '名称长度 2-50 位', trigger: 'blur' }
+    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
   ]
 }
 
-onMounted(async () => {
+const loadData = async () => {
   loading.value = true
   try {
-    await knowledgeStore.fetchKnowledgeBaseList()
-  } catch {
-    // 错误已由拦截器处理
+    knowledgeBaseList.value = await knowledgeStore.fetchKnowledgeBaseList()
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(loadData)
 
 const showCreateDialog = () => {
-  createForm.name = ''
-  createForm.description = ''
+  dialogMode.value = 'create'
+  form.value = { id: '', name: '', description: '' }
   createDialogVisible.value = true
 }
 
-const handleCreate = async () => {
-  if (!formRef.value) return
-
-  try {
-    await formRef.value.validate()
-  } catch {
-    return // 验证失败
-  }
-
-  createLoading.value = true
-  try {
-    await knowledgeStore.createKb(createForm.name, createForm.description)
-    ElMessage.success('创建成功')
-    createDialogVisible.value = false
-  } catch {
-    // 错误已由拦截器处理
-  } finally {
-    createLoading.value = false
-  }
+const handleEdit = (_kb: KnowledgeBase) => {
+  window.alert('当前后端还没有提供编辑现有知识库的接口，先保留为只读管理。')
 }
 
-const handleEnter = (row: KnowledgeBase) => {
-  knowledgeStore.setCurrentKb(row.id)
-  router.push(`/knowledge-base/${row.id}`)
+const handleEnter = (kb: KnowledgeBase) => {
+  knowledgeStore.setCurrentKb(kb.id)
+  router.push(`/knowledge-base/${kb.id}`)
 }
 
-const handleDelete = (row: KnowledgeBase) => {
-  ElMessageBox.confirm(`确定删除知识库 "${row.name}" 吗？`, '提示', {
-    type: 'warning'
-  }).then(async () => {
+const handleDelete = (kb: KnowledgeBase) => {
+  ElMessageBox.confirm(
+    `确认删除知识库 "${kb.name}" 吗？此操作不可恢复，关联的文档也会被删除。`,
+    '删除确认',
+    {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    }
+  ).then(async () => {
     try {
-      await knowledgeStore.deleteKb(row.id)
+      await knowledgeStore.deleteKb(kb.id)
       ElMessage.success('删除成功')
-    } catch {
-      // 错误已由拦截器处理
+      await loadData()
+    } catch (_error) {
+      // Error handled by interceptor.
     }
   })
+}
+
+const submitForm = async () => {
+  if (!formRef.value) return
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+    submitLoading.value = true
+    try {
+      if (dialogMode.value === 'create') {
+        await knowledgeStore.createKb(form.value.name, form.value.description)
+        ElMessage.success('创建成功')
+      }
+      createDialogVisible.value = false
+      await loadData()
+    } finally {
+      submitLoading.value = false
+    }
+  })
+}
+
+function formatDate(value?: string) {
+  if (!value) return '未知'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 </script>
 
 <style scoped>
-.page-container {
-  padding: 20px;
+.kb-card {
+  position: relative;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9)),
+    rgba(255, 255, 255, 0.88);
+  padding: 28px;
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  backdrop-filter: blur(18px);
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
+.kb-hero {
+  min-height: 280px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(45, 212, 191, 0.14), transparent 34%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 250, 0.88));
+}
+
+.kb-hero__orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(18px);
+  opacity: 0.45;
+}
+
+.kb-hero__orb--blue {
+  top: -40px;
+  right: -20px;
+  width: 180px;
+  height: 180px;
+  background: rgba(59, 130, 246, 0.22);
+}
+
+.kb-hero__orb--mint {
+  bottom: -40px;
+  left: 24%;
+  width: 150px;
+  height: 150px;
+  background: rgba(20, 184, 166, 0.18);
+}
+
+.kb-tag {
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 20px;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
 }
 
-.page-header h2 {
-  margin: 0;
+.kb-primary-btn,
+.kb-secondary-btn,
+.kb-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.kb-primary-btn:hover,
+.kb-secondary-btn:hover,
+.kb-danger-btn:hover {
+  transform: translateY(-1px);
+}
+
+.kb-primary-btn {
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: white;
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.2);
+}
+
+.kb-primary-btn:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.kb-secondary-btn {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.8);
+  color: #0f172a;
+}
+
+.kb-danger-btn {
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  background: rgba(254, 242, 242, 0.86);
+  color: #dc2626;
+}
+
+.kb-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.kb-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.kb-icon-badge--blue {
+  background: rgba(219, 234, 254, 0.78);
+  color: #1d4ed8;
+}
+
+.kb-stat {
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(248, 250, 252, 0.82);
+  padding: 18px;
+}
+
+.kb-stat__label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.kb-stat__value {
+  display: block;
+  margin-top: 10px;
+  font-size: 22px;
+  color: #0f172a;
+}
+
+.kb-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.28), transparent);
+}
+
+.kb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  border-radius: 26px;
+  border: 1px dashed rgba(148, 163, 184, 0.36);
+  background: rgba(248, 250, 252, 0.74);
+  padding: 52px 20px;
+  text-align: center;
+}
+
+.kb-empty__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 20px;
+  background: rgba(219, 234, 254, 0.82);
+  color: #2563eb;
+}
+
+.kb-empty h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.kb-empty p {
+  max-width: 460px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #64748b;
+}
+
+.kb-list-card {
+  border-radius: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.84);
+  padding: 24px;
+  box-shadow:
+    0 18px 42px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.kb-list-card.is-current {
+  border-color: rgba(59, 130, 246, 0.24);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 0.9));
+}
+
+.kb-list-card__count {
+  min-width: 92px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.9);
+  padding: 14px 12px;
+  text-align: center;
+}
+
+.kb-list-card__count span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.kb-list-card__count strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 22px;
+  color: #0f172a;
+}
+
+.kb-meta {
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.84);
+  padding: 14px 16px;
+}
+
+.kb-meta__label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.kb-meta__value {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.kb-hero-title {
+  font-size: 2.35rem;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+}
+
+:deep(.kb-dialog .el-dialog) {
+  border-radius: 30px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  box-shadow: 0 32px 80px rgba(15, 23, 42, 0.18);
+}
+
+:deep(.kb-dialog .el-dialog__header) {
+  padding: 24px 28px 0;
+}
+
+:deep(.kb-dialog .el-dialog__body) {
+  padding: 20px 28px 28px;
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner) {
+  border-radius: 18px;
+  box-shadow: none;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+@media (max-width: 768px) {
+  .kb-hero-title {
+    font-size: 1.92rem;
+    line-height: 1.24;
+    letter-spacing: -0.02em;
+  }
 }
 </style>

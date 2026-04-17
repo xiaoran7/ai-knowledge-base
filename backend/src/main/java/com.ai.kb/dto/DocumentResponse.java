@@ -1,6 +1,7 @@
 package com.ai.kb.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record DocumentResponse(
         String id,
@@ -11,6 +12,7 @@ public record DocumentResponse(
         String processingStage,
         String categoryId,
         String categoryName,
+        List<String> tags,
         LocalDateTime createdAt,
         String content,
         String summaryContent,

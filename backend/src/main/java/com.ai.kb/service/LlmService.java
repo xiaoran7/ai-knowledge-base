@@ -24,6 +24,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.ai.kb.dto.CategorizationResult;
+import com.ai.kb.entity.Category;
 
 @Slf4j
 @Service
@@ -36,6 +40,7 @@ public class LlmService {
 
     private final LlmConfigRepository llmConfigRepository;
     private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public GenerationResult chat(String question, String context, LlmConfig config) {
         String systemPrompt = (context != null && !context.isBlank())
@@ -59,6 +64,59 @@ public class LlmService {
         String prompt = "Rewrite the user's query into a compact retrieval query. "
                 + "Keep it in the same language as the user. Return only the rewritten query.";
         return generate(prompt, question, config).content();
+    }
+
+    public CategorizationResult autoCategorize(String title, String summary, List<Category> categories, LlmConfig config) {
+        if (summary == null || summary.isBlank()) {
+            return new CategorizationResult(null, Collections.emptyList());
+        }
+
+        StringBuilder categoryListStr = new StringBuilder();
+        if (categories != null && !categories.isEmpty()) {
+            for (Category c : categories) {
+                categoryListStr
+                        .append("- ID: ")
+                        .append(c.getId())
+                        .append(", Name: ")
+                        .append(c.getName())
+                        .append("\n");
+            }
+        } else {
+            categoryListStr.append("No categories available.\n");
+        }
+
+        String prompt = """
+                You are an expert document categorizer.
+                You must categorize the document based on its title and summary.
+                You are given a list of available categories. If a matching category exists, select the most relevant Category ID. If no category fits, you may leave the ID as null.
+                Also, extract 3 to 5 precise keywords as tags for the document.
+                
+                Respond ONLY with a valid JSON strictly following this schema without markdown block formatting:
+                {
+                  "categoryId": "string (or null if no match)",
+                  "tags": ["tag1", "tag2", "tag3"]
+                }
+                """;
+
+        String userMsg = "Document Title: " + title + "\n\nAvailable Categories:\n" + categoryListStr.toString() + "\n\nDocument Summary:\n" + summary;
+        String jsonResponse = generate(prompt, userMsg, config).content();
+
+        try {
+            // Unescape markdown codeblocks if they exist
+            if (jsonResponse.startsWith("```json")) {
+                jsonResponse = jsonResponse.substring(7);
+            }
+            if (jsonResponse.startsWith("```")) {
+                jsonResponse = jsonResponse.substring(3);
+            }
+            if (jsonResponse.endsWith("```")) {
+                jsonResponse = jsonResponse.substring(0, jsonResponse.length() - 3);
+            }
+            return objectMapper.readValue(jsonResponse.trim(), CategorizationResult.class);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to parse classification JSON from LLM: {}", jsonResponse, e);
+            return new CategorizationResult(null, Collections.emptyList());
+        }
     }
 
     public String generateConversationTitle(List<String> lines, LlmConfig config) {

@@ -8,6 +8,7 @@ public record ChatResponse(
         String title,
         String content,
         String thinking,
-        List<SourceResponse> sources
+        List<SourceResponse> sources,
+        List<ToolCallResponse> toolCalls
 ) {
 }

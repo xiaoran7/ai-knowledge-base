@@ -9,6 +9,7 @@ public record MessageResponse(
         String content,
         String thinking,
         List<SourceResponse> sources,
+        List<ToolCallResponse> toolCalls,
         LocalDateTime createdAt
 ) {
 }
