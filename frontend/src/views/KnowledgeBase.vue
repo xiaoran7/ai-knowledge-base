@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 text-slate-900">
     <section class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
       <div class="kb-card kb-hero overflow-hidden">
@@ -10,11 +10,9 @@
             Knowledge spaces
           </span>
           <div class="space-y-3">
-            <h1 class="kb-hero-title text-slate-950">
-              用独立知识库把资料、摘要和对话上下文清晰分层。
-            </h1>
+            <h1 class="kb-hero-title text-slate-950">用独立知识库把资料、摘要和对话上下文分层整理。</h1>
             <p class="max-w-2xl text-sm leading-7 text-slate-600 md:text-[15px]">
-              每个知识库都是一个可持续工作的空间。你可以按项目、客户、主题或部门隔离资料，避免检索结果和会话记忆互相污染。
+              每个知识库都是一个可持续工作的空间。你可以按项目、客户、主题或团队隔离资料，避免检索结果和会话记忆彼此污染。
             </p>
           </div>
 
@@ -56,7 +54,7 @@
         <div class="kb-divider"></div>
 
         <div class="space-y-3 text-sm leading-7 text-slate-600">
-          <p>建议按业务边界建库，而不是把所有资料塞进同一个空间。</p>
+          <p>建议按业务边界建库，而不是把所有资料堆进同一个空间。</p>
           <p>这样可以让摘要、向量检索和会话记忆都更稳定，也更方便后续做权限和归档扩展。</p>
         </div>
       </div>
@@ -148,7 +146,7 @@
 
     <el-dialog
       v-model="createDialogVisible"
-      :title="dialogMode === 'create' ? '新建知识库' : '编辑知识库'"
+      :title="dialogMode === 'create' ? '\u65b0\u5efa\u77e5\u8bc6\u5e93' : '\u7f16\u8f91\u77e5\u8bc6\u5e93'"
       width="560px"
       append-to-body
       destroy-on-close
@@ -225,8 +223,8 @@ const form = ref({
 
 const rules: FormRules = {
   name: [
-    { required: true, message: '请输入知识库名称', trigger: 'blur' },
-    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+    { required: true, message: '\u8bf7\u8f93\u5165\u77e5\u8bc6\u5e93\u540d\u79f0', trigger: 'blur' },
+    { min: 2, max: 50, message: '\u957f\u5ea6\u5728 2 \u5230 50 \u4e2a\u5b57\u7b26', trigger: 'blur' }
   ]
 }
 
@@ -247,8 +245,14 @@ const showCreateDialog = () => {
   createDialogVisible.value = true
 }
 
-const handleEdit = (_kb: KnowledgeBase) => {
-  window.alert('当前后端还没有提供编辑现有知识库的接口，先保留为只读管理。')
+const handleEdit = (kb: KnowledgeBase) => {
+  dialogMode.value = 'edit'
+  form.value = {
+    id: kb.id,
+    name: kb.name,
+    description: kb.description || ''
+  }
+  createDialogVisible.value = true
 }
 
 const handleEnter = (kb: KnowledgeBase) => {
@@ -258,17 +262,17 @@ const handleEnter = (kb: KnowledgeBase) => {
 
 const handleDelete = (kb: KnowledgeBase) => {
   ElMessageBox.confirm(
-    `确认删除知识库 "${kb.name}" 吗？此操作不可恢复，关联的文档也会被删除。`,
-    '删除确认',
+    `\u786e\u8ba4\u5220\u9664\u77e5\u8bc6\u5e93 "${kb.name}" \u5417\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u6062\u590d\uff0c\u5173\u8054\u7684\u6587\u6863\u4e5f\u4f1a\u88ab\u5220\u9664\u3002`,
+    '\u5220\u9664\u786e\u8ba4',
     {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
+      confirmButtonText: '\u5220\u9664',
+      cancelButtonText: '\u53d6\u6d88'
     }
   ).then(async () => {
     try {
       await knowledgeStore.deleteKb(kb.id)
-      ElMessage.success('删除成功')
+      ElMessage.success('\u5220\u9664\u6210\u529f')
       await loadData()
     } catch (_error) {
       // Error handled by interceptor.
@@ -284,7 +288,10 @@ const submitForm = async () => {
     try {
       if (dialogMode.value === 'create') {
         await knowledgeStore.createKb(form.value.name, form.value.description)
-        ElMessage.success('创建成功')
+        ElMessage.success('\u521b\u5efa\u6210\u529f')
+      } else {
+        await knowledgeStore.updateKb(form.value.id, form.value.name, form.value.description)
+        ElMessage.success('\u4fee\u6539\u6210\u529f')
       }
       createDialogVisible.value = false
       await loadData()
@@ -295,7 +302,7 @@ const submitForm = async () => {
 }
 
 function formatDate(value?: string) {
-  if (!value) return '未知'
+  if (!value) return '\u672a\u77e5'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
@@ -591,3 +598,5 @@ function formatDate(value?: string) {
   }
 }
 </style>
+
+

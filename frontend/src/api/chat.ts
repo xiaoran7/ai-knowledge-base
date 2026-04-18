@@ -8,10 +8,12 @@ export interface Source {
   score: number
 }
 
+export type ToolStatus = 'success' | 'failed' | 'blocked'
+
 export interface ToolCall {
   name: string
   title: string
-  status: string
+  status: ToolStatus
   summary: string
   detail?: string
 }

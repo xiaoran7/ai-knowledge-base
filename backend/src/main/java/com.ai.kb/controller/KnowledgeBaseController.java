@@ -51,6 +51,15 @@ public class KnowledgeBaseController {
     /**
      * 获取知识库详情
      */
+    @PutMapping("/{id}")
+    public KnowledgeBaseResponse update(
+            @PathVariable String id,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestBody KnowledgeBaseRequest request) {
+        String userId = getUserIdFromToken(authHeader);
+        return knowledgeBaseService.update(id, userId, request);
+    }
+
     @GetMapping("/{id}")
     public KnowledgeBaseResponse getById(@PathVariable String id) {
         return knowledgeBaseService.getById(id);

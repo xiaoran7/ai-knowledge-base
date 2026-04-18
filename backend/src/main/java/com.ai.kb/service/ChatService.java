@@ -107,7 +107,11 @@ public class ChatService {
             sources = retrievalResult.sources();
         } catch (Exception e) {
             log.error("AI chat failed", e);
-            answerContent = "AI 问答失败：" + e.getMessage();
+            if (!toolCalls.isEmpty()) {
+                answerContent = buildToolOnlyAnswer(toolCalls, e.getMessage());
+            } else {
+                answerContent = "\u0041\u0049 \u95ee\u7b54\u5931\u8d25\uff1a" + e.getMessage();
+            }
             sources = Collections.emptyList();
         }
 
@@ -570,6 +574,25 @@ public class ChatService {
         } catch (JacksonException e) {
             return Collections.emptyList();
         }
+    }
+
+    private String buildToolOnlyAnswer(List<ToolCallResponse> toolCalls, String reason) {
+        List<String> lines = new ArrayList<>();
+        long successCount = toolCalls.stream().filter(tool -> "success".equalsIgnoreCase(tool.status())).count();
+        if (successCount > 0) {
+            lines.add("\u5df2\u5148\u76f4\u63a5\u5b8c\u6210\u53ef\u7528\u7684\u77e5\u8bc6\u5e93\u7ba1\u7406\u52a8\u4f5c\uff1a");
+        } else {
+            lines.add("\u5df2\u5c1d\u8bd5\u6267\u884c\u77e5\u8bc6\u5e93\u7ba1\u7406\u52a8\u4f5c\uff0c\u4f46\u672a\u5f97\u5230\u6210\u529f\u7ed3\u679c\uff1a");
+        }
+        for (ToolCallResponse tool : toolCalls) {
+            String prefix = "success".equalsIgnoreCase(tool.status()) ? "- [\u6210\u529f] " : "- [\u5931\u8d25] ";
+            lines.add(prefix + tool.title() + "\uff1a" + tool.summary());
+        }
+        if (reason != null && !reason.isBlank()) {
+            lines.add("");
+            lines.add("\u672c\u6b21\u672a\u751f\u6210 LLM \u56de\u590d\uff0c\u539f\u56e0\uff1a" + reason);
+        }
+        return String.join("\n", lines);
     }
 
     private List<ToolCallResponse> parseToolCalls(String json) {

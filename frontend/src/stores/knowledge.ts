@@ -5,7 +5,8 @@ import {
   createKnowledgeBase,
   deleteKnowledgeBase,
   getCategoryList,
-  getKnowledgeBaseList
+  getKnowledgeBaseList,
+  updateKnowledgeBase
 } from '@/api/knowledge'
 
 const STORAGE_KEY = 'current_kb_id'
@@ -44,6 +45,12 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     return res
   }
 
+  async function updateKb(id: string, name: string, description: string) {
+    const res = await updateKnowledgeBase(id, { name, description })
+    knowledgeBaseList.value = knowledgeBaseList.value.map((kb) => (kb.id === id ? res : kb))
+    return res
+  }
+
   async function deleteKb(id: string) {
     await deleteKnowledgeBase(id)
     knowledgeBaseList.value = knowledgeBaseList.value.filter((kb) => kb.id !== id)
@@ -79,6 +86,7 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     categoryList,
     fetchKnowledgeBaseList,
     createKb,
+    updateKb,
     deleteKb,
     fetchCategoryList,
     setCurrentKb

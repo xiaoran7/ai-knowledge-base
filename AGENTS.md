@@ -135,3 +135,11 @@ frontend/src/
 - Backend directory structure uses `com.ai.kb` as folder name (not standard Java package path)
 - When creating new entities, follow User.java pattern with UUID id and timestamp fields
 - Frontend uses Element Plus components; follow existing page patterns
+- Every meaningful development or optimization task must also update the relevant documentation in the same round
+- Prefer updating existing docs instead of creating duplicate notes when possible
+- At minimum, keep these docs in sync when they are affected:
+  - `docs/v1-gap-tracker.md`: feature completion status, partial completion, remaining gaps, next priorities
+  - `docs/requirements.md`: product requirements or scope changes
+  - `docs/architecture.md`: architectural changes, new modules, data flow changes, important boundaries
+  - `memory/project_status.md` or a new handoff note in `memory/`: current implementation status and continuation context
+- If a task changes behavior, UX flow, API shape, storage model, routing, or delivery status, the docs should be updated before considering the task finished

@@ -46,9 +46,11 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -223,6 +225,56 @@ public class DocumentService {
                 .collect(Collectors.toList());
 
         return new DocumentListResponse(list, docPage.getTotalElements(), page, size);
+    }
+
+    public boolean existsInKnowledgeBase(String kbId, String title) {
+        if (kbId == null || kbId.isBlank() || title == null || title.isBlank()) {
+            return false;
+        }
+        return documentRepository.existsByKnowledgeBaseIdAndTitleIgnoreCase(kbId, title.trim());
+    }
+
+    public List<DocumentResponse> findByTitles(String kbId, List<String> titles) {
+        if (kbId == null || kbId.isBlank() || titles == null || titles.isEmpty()) {
+            return List.of();
+        }
+
+        List<Document> documents = documentRepository.findByKnowledgeBaseId(kbId);
+        Set<String> seenDocumentIds = new LinkedHashSet<>();
+        List<DocumentResponse> matched = new ArrayList<>();
+
+        for (String rawTitle : titles) {
+            String normalizedTitle = normalizeLookupText(rawTitle);
+            if (normalizedTitle.isBlank()) {
+                continue;
+            }
+
+            Document exactMatch = documents.stream()
+                    .filter(document -> normalizeLookupText(document.getTitle()).equals(normalizedTitle))
+                    .findFirst()
+                    .orElse(null);
+
+            Document candidate = exactMatch != null ? exactMatch : documents.stream()
+                    .filter(document -> normalizeLookupText(document.getTitle()).contains(normalizedTitle))
+                    .findFirst()
+                    .orElse(null);
+
+            if (candidate != null && seenDocumentIds.add(candidate.getId())) {
+                matched.add(toResponse(candidate));
+            }
+        }
+
+        return matched;
+    }
+
+    public List<DocumentResponse> findAllByKnowledgeBase(String kbId) {
+        if (kbId == null || kbId.isBlank()) {
+            return List.of();
+        }
+        return documentRepository.findByKnowledgeBaseId(kbId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     public DocumentResponse getById(String documentId) {
@@ -443,6 +495,39 @@ public class DocumentService {
     }
 
     @Transactional
+    public List<DocumentResponse> deleteBatch(List<String> documentIds, String userId) {
+        List<Document> documents = loadOwnedDocuments(documentIds, userId);
+        if (documents.isEmpty()) {
+            return List.of();
+        }
+
+        List<DocumentResponse> deleted = documents.stream()
+                .map(this::toResponse)
+                .toList();
+
+        Set<String> affectedKnowledgeBaseIds = new LinkedHashSet<>();
+        Set<String> affectedCategoryIds = new LinkedHashSet<>();
+        for (Document document : documents) {
+            deleteChunksAndVectors(document.getId());
+            try {
+                Files.deleteIfExists(Paths.get(document.getFilePath()));
+            } catch (IOException e) {
+                log.warn("删除文件失败: {}", e.getMessage());
+            }
+            affectedKnowledgeBaseIds.add(document.getKnowledgeBaseId());
+            if (document.getCategoryId() != null && !document.getCategoryId().isBlank()) {
+                affectedCategoryIds.add(document.getCategoryId());
+            }
+        }
+
+        documentRepository.deleteAll(documents);
+
+        affectedKnowledgeBaseIds.forEach(this::updateKnowledgeBaseDocumentCount);
+        affectedCategoryIds.forEach(this::updateCategoryDocumentCount);
+        return deleted;
+    }
+
+    @Transactional
     public void setCategory(String documentId, String categoryId, String userId) {
         Document doc = documentRepository.findById(documentId)
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在"));
@@ -461,6 +546,40 @@ public class DocumentService {
         if (categoryId != null && !categoryId.isBlank()) {
             updateCategoryDocumentCount(categoryId);
         }
+    }
+
+    @Transactional
+    public List<DocumentResponse> setCategoryBatch(List<String> documentIds, String categoryId, String userId) {
+        List<Document> documents = loadOwnedDocuments(documentIds, userId);
+        if (documents.isEmpty()) {
+            return List.of();
+        }
+
+        String knowledgeBaseId = documents.get(0).getKnowledgeBaseId();
+        validateCategory(knowledgeBaseId, categoryId);
+        String normalizedCategoryId = categoryId == null || categoryId.isBlank() ? null : categoryId;
+        Set<String> affectedCategoryIds = new LinkedHashSet<>();
+
+        for (Document document : documents) {
+            if (!knowledgeBaseId.equals(document.getKnowledgeBaseId())) {
+                throw new IllegalArgumentException("批量操作仅支持同一知识库下的文档");
+            }
+            if (document.getCategoryId() != null && !document.getCategoryId().isBlank()) {
+                affectedCategoryIds.add(document.getCategoryId());
+            }
+            document.setCategoryId(normalizedCategoryId);
+        }
+
+        documentRepository.saveAll(documents);
+
+        if (normalizedCategoryId != null) {
+            affectedCategoryIds.add(normalizedCategoryId);
+        }
+        affectedCategoryIds.forEach(this::updateCategoryDocumentCount);
+
+        return documents.stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     private void handleSummaryUpdate(Document document, DocumentUpdateRequest request, String requestedMode, String userId, boolean shouldRegenerate) {
@@ -764,6 +883,35 @@ public class DocumentService {
 
     private String safeText(String value) {
         return value == null || value.isBlank() ? "unknown" : value;
+    }
+
+    private List<Document> loadOwnedDocuments(List<String> documentIds, String userId) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> normalizedIds = documentIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+        if (normalizedIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<Document> documents = documentRepository.findAllById(normalizedIds);
+        if (documents.size() != normalizedIds.size()) {
+            throw new IllegalArgumentException("部分文档不存在或已被删除");
+        }
+        for (Document document : documents) {
+            if (!document.getUserId().equals(userId)) {
+                throw new IllegalArgumentException("无权操作部分文档");
+            }
+        }
+        return documents;
+    }
+
+    private String normalizeLookupText(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private List<String> chunkContentWithOverlap(String content, int chunkSize, int overlap) {

@@ -9,9 +9,9 @@ import java.util.List;
 @Repository
 public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, String> {
 
-    // 根据用户 ID 查询知识库列表
     List<KnowledgeBase> findByUserId(String userId);
 
-    // 检查名称是否存在
     boolean existsByName(String name);
+
+    boolean existsByUserIdAndNameIgnoreCase(String userId, String name);
 }

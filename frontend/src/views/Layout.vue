@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="flex h-screen w-full overflow-hidden bg-white text-sm text-gray-900 dark:bg-gray-900 dark:text-gray-100">
     <aside
       class="flex h-full w-[280px] shrink-0 flex-col border-r border-gray-200 bg-gray-50/70 backdrop-blur-xl dark:border-white/10 dark:bg-black/50"

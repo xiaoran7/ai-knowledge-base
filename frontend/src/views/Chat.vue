@@ -91,9 +91,7 @@
                       v-for="tool in msg.toolCalls"
                       :key="`${msg.id}-${tool.name}-${tool.title}`"
                       class="rounded-2xl border px-4 py-3"
-                      :class="tool.status === 'success'
-                        ? 'border-sky-100 bg-sky-50/70 dark:border-sky-900/30 dark:bg-sky-900/10'
-                        : 'border-rose-100 bg-rose-50/70 dark:border-rose-900/30 dark:bg-rose-900/10'"
+                      :class="getToolCardClass(tool.status)"
                     >
                       <div class="flex items-start justify-between gap-3">
                         <div>
@@ -102,10 +100,10 @@
                         </div>
                         <el-tag
                           size="small"
-                          :type="tool.status === 'success' ? 'success' : 'danger'"
+                          :type="getToolTagType(tool.status)"
                           class="!rounded-full !px-3 shrink-0"
                         >
-                          {{ tool.status === 'success' ? '成功' : '失败' }}
+                          {{ getToolStatusText(tool.status) }}
                         </el-tag>
                       </div>
                       <pre
@@ -295,7 +293,7 @@ import { Brain, ChevronRight, Database, FileText, Info, MessageSquare, Plus, Sen
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useUserStore } from '@/stores/user'
 import { chat, debugRetrieval, deleteConversation, exportConversation, getConversationDetail, getConversationList, updateConversationMemory } from '@/api/chat'
-import type { ChatResponse, Conversation, ConversationDetail, Message } from '@/api/chat'
+import type { ChatResponse, Conversation, ConversationDetail, Message, ToolStatus } from '@/api/chat'
 
 const CHAT_CACHE_KEY = 'chat_page_state_v1'
 
@@ -345,6 +343,28 @@ const isThinkingExpanded = (messageId: string) => expandedThinkingIds.value.incl
 const formatThinkingMeta = (thinking?: string) => {
   const lines = (thinking || '').split('\n').map((line) => line.trim()).filter(Boolean).length
   return lines ? `${lines} 行` : '点击展开'
+}
+
+function getToolCardClass(status?: ToolStatus) {
+  if (status === 'success') {
+    return 'border-sky-100 bg-sky-50/70 dark:border-sky-900/30 dark:bg-sky-900/10'
+  }
+  if (status === 'blocked') {
+    return 'border-amber-100 bg-amber-50/80 dark:border-amber-900/30 dark:bg-amber-900/10'
+  }
+  return 'border-rose-100 bg-rose-50/70 dark:border-rose-900/30 dark:bg-rose-900/10'
+}
+
+function getToolTagType(status?: ToolStatus) {
+  if (status === 'success') return 'success'
+  if (status === 'blocked') return 'warning'
+  return 'danger'
+}
+
+function getToolStatusText(status?: ToolStatus) {
+  if (status === 'success') return '成功'
+  if (status === 'blocked') return '待确认'
+  return '失败'
 }
 
 function toggleThinking(messageId: string) {

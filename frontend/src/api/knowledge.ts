@@ -82,6 +82,10 @@ export function createKnowledgeBase(data: { name: string; description: string })
   return post<KnowledgeBase>('/knowledge-base', data)
 }
 
+export function updateKnowledgeBase(id: string, data: { name: string; description: string }) {
+  return put<KnowledgeBase>(`/knowledge-base/${id}`, data)
+}
+
 /**
  * 删除知识库
  */

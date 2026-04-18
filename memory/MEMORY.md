@@ -1,14 +1,17 @@
 # Memory Index
 
+## Handoffs
+- [Session Handoff 2026-04-16](session_handoff_2026-04-16.md) - 长会话开发交接记录，包含目标演进、已完成工作、当前能力与后续优先级
+
 ## User
-- [新手开发者](user_role.md) — 第一次做项目，需要详细解释和指导
+- [user_role.md](user_role.md) - 用户角色与协作方式
 
 ## Feedback
-- [禁止写代码](feedback_no_code.md) — 只指导不写代码，让用户自己动手学习
-- [VibeCoding 模式](feedback_vibecoding.md) — 用户不想自己敲代码，希望 AI 直接生成完整代码
+- [feedback_no_code.md](feedback_no_code.md) - 仅指导不写代码的负反馈记录
+- [feedback_vibecoding.md](feedback_vibecoding.md) - 用户偏好 AI 直接落代码的协作方式
 
 ## Project
-- [项目当前状态](project_status.md) — 后端已启动成功，正在创建 Security 和 User 实体
+- [project_status.md](project_status.md) - 项目状态与阶段性进展
 
 ## Reference
-- [后端目录结构](reference_backend_structure.md) — 包结构和开发顺序参考
+- [reference_backend_structure.md](reference_backend_structure.md) - 后端目录结构与开发参考

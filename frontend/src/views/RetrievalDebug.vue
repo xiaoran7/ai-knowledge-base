@@ -1,12 +1,11 @@
-<template>
+﻿<template>
   <div class="retrieval-workspace page-container">
     <section class="hero-panel">
-      <div>
+      <div class="hero-copy-block">
         <p class="hero-eyebrow">Retrieval Workspace</p>
         <h2>把 query rewrite、召回结果和命中片段放到同一个工作台里</h2>
         <p class="hero-copy">
-          这里适合做检索质量排查。你可以输入问题，查看改写前后的查询词、最终采用的检索语句，以及 summary / raw
-          chunk 的命中差异。
+          这里适合做检索质量排查。你可以输入一个问题，对比原始查询、改写后的查询、最终采用的查询词，以及 summary / raw chunk 的命中差异。
         </p>
       </div>
 
@@ -20,7 +19,7 @@
       <div class="toolbar-grid">
         <div class="toolbar-item">
           <span class="toolbar-label">知识库</span>
-          <el-select v-model="selectedKbId" placeholder="选择知识库">
+          <el-select v-model="selectedKbId" placeholder="选择一个知识库">
             <el-option
               v-for="kb in knowledgeStore.knowledgeBaseList"
               :key="kb.id"
@@ -30,40 +29,65 @@
           </el-select>
         </div>
 
-        <div class="toolbar-item">
+        <div class="toolbar-item toolbar-item--narrow">
           <span class="toolbar-label">Top K</span>
           <el-input-number v-model="topK" :min="1" :max="20" />
         </div>
       </div>
 
       <div class="query-panel">
-        <span class="toolbar-label">调试问题</span>
+        <div class="query-panel__header">
+          <span class="toolbar-label">调试问题</span>
+          <div class="query-examples">
+            <button class="example-chip" @click="applyExample('C++ 是什么')">C++ 是什么</button>
+            <button class="example-chip" @click="applyExample('帮我总结这个知识库里关于 Spring Boot 的内容')">
+              Spring Boot
+            </button>
+            <button class="example-chip" @click="applyExample('这个知识库里有没有关于向量检索的文档')">
+              向量检索
+            </button>
+          </div>
+        </div>
+
         <el-input
           v-model="query"
           type="textarea"
-          :rows="4"
+          :rows="5"
           placeholder="输入一个用户问题，观察 query rewrite、最终检索词和召回片段"
           @keydown.ctrl.enter.prevent="handleRunDebug"
         />
+
         <div class="query-actions">
-          <span class="query-hint">按 `Ctrl + Enter` 可直接开始调试</span>
+          <span class="query-hint">按 Ctrl + Enter 可直接开始调试</span>
           <el-button type="primary" :loading="loading" @click="handleRunDebug">运行检索调试</el-button>
         </div>
       </div>
     </el-card>
+
+    <el-alert
+      v-if="errorText"
+      class="error-alert"
+      type="error"
+      :closable="true"
+      :title="errorText"
+      show-icon
+      @close="errorText = ''"
+    />
 
     <template v-if="result">
       <section class="summary-grid">
         <el-card class="summary-card">
           <span class="summary-label">原始问题</span>
           <strong>{{ result.originalQuery }}</strong>
-          <p>这是用户最初输入到检索链路的问题。</p>
+          <p>这是用户最初输入到检索链路里的问题。</p>
         </el-card>
+
         <el-card class="summary-card">
           <span class="summary-label">改写问题</span>
           <strong>{{ result.rewrittenQuery || '未触发改写' }}</strong>
           <p>如果改写结果更适合检索，这里会展示 rewrite 后的版本。</p>
         </el-card>
+
         <el-card class="summary-card">
           <span class="summary-label">最终采用</span>
           <strong>{{ result.usedQuery }}</strong>
@@ -71,15 +95,32 @@
         </el-card>
       </section>
 
+      <section class="metric-grid">
+        <article class="metric-card">
+          <span>原始召回</span>
+          <strong>{{ result.originalHits.length }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>改写召回</span>
+          <strong>{{ result.rewrittenHits.length }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>最终命中</span>
+          <strong>{{ result.finalHits.length }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>最佳分数</span>
+          <strong>{{ formatScore(bestFinalScore) }}</strong>
+        </article>
+      </section>
+
       <el-card class="results-card">
         <div class="result-header">
           <div>
             <h3>召回对比</h3>
-            <p>同一问题下，对比原始查询、改写查询和最终选中结果。</p>
+            <p>同一问题下，对比原始查询、改写查询和最终采用结果。</p>
           </div>
-          <div class="result-stat">
-            <el-tag type="success" effect="plain">最终命中 {{ result.finalHits.length }}</el-tag>
-          </div>
+          <el-tag type="success" effect="plain">最终命中 {{ result.finalHits.length }}</el-tag>
         </div>
 
         <el-tabs v-model="activeTab" class="result-tabs">
@@ -90,8 +131,9 @@
                   <div>
                     <div class="hit-title">{{ hit.documentTitle || '未命名文档' }}</div>
                     <div class="hit-meta">
-                      <span>chunk {{ hit.chunkIndex }}</span>
+                      <span>chunk {{ hit.chunkIndex || '-' }}</span>
                       <span>{{ formatScore(hit.score) }}</span>
+                      <span>{{ hit.documentId }}</span>
                     </div>
                   </div>
 
@@ -99,12 +141,10 @@
                     <el-tag size="small" :type="getChunkTagType(hit.chunkType)">
                       {{ formatChunkType(hit.chunkType) }}
                     </el-tag>
-                    <el-button link type="primary" @click="openDocument(hit.documentId)">
-                      前往文档
-                    </el-button>
+                    <el-button link type="primary" @click="openDocument(hit.documentId)">前往文档</el-button>
                   </div>
                 </div>
-                <div class="hit-content">{{ hit.content }}</div>
+                <div class="hit-content">{{ hit.content || '该片段暂无可展示内容' }}</div>
               </article>
               <el-empty v-if="!result.finalHits.length" description="当前问题没有命中可展示的检索结果" />
             </div>
@@ -112,16 +152,12 @@
 
           <el-tab-pane :label="`原始召回 (${result.originalHits.length})`" name="original">
             <div class="hit-list">
-              <article
-                v-for="hit in result.originalHits"
-                :key="`original-${hit.chunkId}`"
-                class="hit-card compact"
-              >
+              <article v-for="hit in result.originalHits" :key="`original-${hit.chunkId}`" class="hit-card compact">
                 <div class="hit-head">
                   <div>
                     <div class="hit-title">{{ hit.documentTitle || '未命名文档' }}</div>
                     <div class="hit-meta">
-                      <span>chunk {{ hit.chunkIndex }}</span>
+                      <span>chunk {{ hit.chunkIndex || '-' }}</span>
                       <span>{{ formatScore(hit.score) }}</span>
                     </div>
                   </div>
@@ -129,24 +165,20 @@
                     {{ formatChunkType(hit.chunkType) }}
                   </el-tag>
                 </div>
-                <div class="hit-content">{{ hit.content }}</div>
+                <div class="hit-content">{{ hit.content || '该片段暂无可展示内容' }}</div>
               </article>
-              <el-empty v-if="!result.originalHits.length" description="原始问题未命中结果" />
+              <el-empty v-if="!result.originalHits.length" description="原始问题没有命中结果" />
             </div>
           </el-tab-pane>
 
           <el-tab-pane :label="`改写召回 (${result.rewrittenHits.length})`" name="rewritten">
             <div class="hit-list">
-              <article
-                v-for="hit in result.rewrittenHits"
-                :key="`rewritten-${hit.chunkId}`"
-                class="hit-card compact"
-              >
+              <article v-for="hit in result.rewrittenHits" :key="`rewritten-${hit.chunkId}`" class="hit-card compact">
                 <div class="hit-head">
                   <div>
                     <div class="hit-title">{{ hit.documentTitle || '未命名文档' }}</div>
                     <div class="hit-meta">
-                      <span>chunk {{ hit.chunkIndex }}</span>
+                      <span>chunk {{ hit.chunkIndex || '-' }}</span>
                       <span>{{ formatScore(hit.score) }}</span>
                     </div>
                   </div>
@@ -154,9 +186,9 @@
                     {{ formatChunkType(hit.chunkType) }}
                   </el-tag>
                 </div>
-                <div class="hit-content">{{ hit.content }}</div>
+                <div class="hit-content">{{ hit.content || '该片段暂无可展示内容' }}</div>
               </article>
-              <el-empty v-if="!result.rewrittenHits.length" description="改写问题未命中结果" />
+              <el-empty v-if="!result.rewrittenHits.length" description="改写问题没有命中结果" />
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -170,7 +202,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { debugRetrieval, type RetrievalDebugResponse } from '@/api/chat'
@@ -185,6 +217,12 @@ const query = ref('')
 const loading = ref(false)
 const activeTab = ref<'final' | 'original' | 'rewritten'>('final')
 const result = ref<RetrievalDebugResponse | null>(null)
+const errorText = ref('')
+
+const bestFinalScore = computed(() => {
+  if (!result.value?.finalHits.length) return 0
+  return Math.max(...result.value.finalHits.map((hit) => hit.score || 0))
+})
 
 function getErrorMessage(error: unknown) {
   if (typeof error === 'object' && error && 'message' in error && typeof error.message === 'string') {
@@ -193,14 +231,16 @@ function getErrorMessage(error: unknown) {
   return '检索调试失败，请稍后重试'
 }
 
+function applyExample(example: string) {
+  query.value = example
+}
+
 function formatScore(score?: number) {
   return `${Math.round((score || 0) * 100)}%`
 }
 
 function formatChunkType(chunkType?: string) {
-  if (!chunkType) {
-    return '未知片段'
-  }
+  if (!chunkType) return '未知片段'
   return chunkType.toLowerCase() === 'summary' ? '总结片段' : '原文片段'
 }
 
@@ -213,6 +253,8 @@ function openDocument(documentId: string) {
 }
 
 async function handleRunDebug() {
+  errorText.value = ''
+
   if (!selectedKbId.value) {
     ElMessage.warning('请先选择一个知识库')
     return
@@ -223,19 +265,20 @@ async function handleRunDebug() {
   }
 
   loading.value = true
-    try {
-      result.value = await debugRetrieval({
-        knowledgeBaseId: selectedKbId.value,
-        message: query.value.trim(),
-        topK: topK.value
-      })
-      activeTab.value = 'final'
-    } catch (error) {
-      ElMessage.error(getErrorMessage(error))
-    } finally {
-      loading.value = false
-    }
+  try {
+    result.value = await debugRetrieval({
+      knowledgeBaseId: selectedKbId.value,
+      message: query.value.trim(),
+      topK: topK.value
+    })
+    activeTab.value = 'final'
+  } catch (error) {
+    errorText.value = getErrorMessage(error)
+    result.value = null
+  } finally {
+    loading.value = false
   }
+}
 
 onMounted(async () => {
   await knowledgeStore.fetchKnowledgeBaseList()
@@ -264,6 +307,10 @@ onMounted(async () => {
   border: 1px solid rgba(214, 229, 223, 0.9);
 }
 
+.hero-copy-block {
+  max-width: 860px;
+}
+
 .hero-eyebrow {
   margin: 0 0 10px;
   font-size: 12px;
@@ -280,7 +327,6 @@ onMounted(async () => {
 }
 
 .hero-copy {
-  max-width: 760px;
   margin: 12px 0 0;
   line-height: 1.8;
   color: #60748a;
@@ -301,7 +347,7 @@ onMounted(async () => {
 
 .toolbar-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 280px));
+  grid-template-columns: minmax(260px, 1fr) minmax(160px, 220px);
   gap: 18px;
 }
 
@@ -309,6 +355,10 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.toolbar-item--narrow {
+  max-width: 220px;
 }
 
 .toolbar-label,
@@ -325,6 +375,33 @@ onMounted(async () => {
   gap: 10px;
 }
 
+.query-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.query-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.example-chip {
+  border: 1px solid #dce8f3;
+  border-radius: 999px;
+  background: #f7fbff;
+  color: #46627d;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.example-chip:hover {
+  background: #eef6ff;
+}
+
 .query-actions {
   display: flex;
   justify-content: space-between;
@@ -337,13 +414,26 @@ onMounted(async () => {
   color: #72869c;
 }
 
-.summary-grid {
+.error-alert {
+  border-radius: 18px;
+}
+
+.summary-grid,
+.metric-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
-.summary-card strong {
+.summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-card strong,
+.metric-card strong {
   display: block;
   margin-top: 10px;
   font-size: 22px;
@@ -355,6 +445,18 @@ onMounted(async () => {
 .summary-card p {
   margin: 10px 0 0;
   line-height: 1.7;
+  color: #6a7d92;
+}
+
+.metric-card {
+  border-radius: 20px;
+  border: 1px solid #e1ecf4;
+  background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+  padding: 18px 20px;
+}
+
+.metric-card span {
+  font-size: 13px;
   color: #6a7d92;
 }
 
@@ -438,6 +540,7 @@ onMounted(async () => {
 @media (max-width: 960px) {
   .hero-panel,
   .query-actions,
+  .query-panel__header,
   .result-header,
   .hit-head {
     flex-direction: column;
@@ -445,7 +548,8 @@ onMounted(async () => {
   }
 
   .toolbar-grid,
-  .summary-grid {
+  .summary-grid,
+  .metric-grid {
     grid-template-columns: 1fr;
   }
 
